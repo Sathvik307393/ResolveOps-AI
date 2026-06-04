@@ -2057,7 +2057,11 @@ if not st.session_state.jwt_token:
                         st.session_state.jwt_token = res.json()["token"]
                         st.rerun()
                     else:
-                        st.error(res.json().get("detail", "Login failed"))
+                        try:
+                            err_msg = res.json().get("detail", "Login failed")
+                        except:
+                            err_msg = f"API Error ({res.status_code}): {res.text[:100]}"
+                        st.error(err_msg)
                 except Exception as e:
                     st.error(f"Error connecting to API backend: {e}")
                     
@@ -2070,7 +2074,11 @@ if not st.session_state.jwt_token:
                     if res.status_code == 200:
                         st.success("Registered successfully! Please login.")
                     else:
-                        st.error(res.json().get("detail", "Registration failed"))
+                        try:
+                            err_msg = res.json().get("detail", "Registration failed")
+                        except:
+                            err_msg = f"API Error ({res.status_code}): {res.text[:100]}"
+                        st.error(err_msg)
                 except Exception as e:
                     st.error(f"Error connecting to API backend: {e}")
     st.stop()
