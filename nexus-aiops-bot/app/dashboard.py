@@ -3268,37 +3268,37 @@ All systems are reporting healthy.
 If you are currently troubleshooting an incident, please select an anomaly scenario in the left sidebar to generate error traces.
 """
                 
-                st.markdown(answer)
-                if citations:
-                    cit_rows = ""
-                    for cit in citations:
-                        level = cit.get("level", "INFO")
-                        lvl_color = "#10b981"
-                        if level in ["ERROR", "CRITICAL"]:
-                            lvl_color = "#ef4444"
-                        elif level == "WARNING":
-                            lvl_color = "#fbbf24"
-                            
-                        cit_rows += f"""
-                        <div class="chat-citation-row">
-                            <span class="chat-citation-time">[{cit.get('timestamp')}]</span>
-                            <span class="chat-citation-level" style="background:{lvl_color}18; color:{lvl_color}; border:1px solid {lvl_color}30;">{level}</span>
-                            <span class="chat-citation-service">{cit.get('service')}</span>:
-                            <span class="chat-citation-msg">{cit.get('message')}</span>
-                        </div>
-                        """
-                    
-                    st.markdown(f"""
-                    <div class="chat-citation-header">
-                        <div class="chat-citation-title"><i class="fa-solid fa-database"></i> Cited Source Telemetry</div>
-                        <div class="chat-citation-console">
-                            {cit_rows}
-                        </div>
+            st.markdown(answer)
+            if citations:
+                cit_rows = ""
+                for cit in citations:
+                    level = cit.get("level", "INFO")
+                    lvl_color = "#10b981"
+                    if level in ["ERROR", "CRITICAL"]:
+                        lvl_color = "#ef4444"
+                    elif level == "WARNING":
+                        lvl_color = "#fbbf24"
+                        
+                    cit_rows += f"""
+                    <div class="chat-citation-row">
+                        <span class="chat-citation-time">[{cit.get('timestamp')}]</span>
+                        <span class="chat-citation-level" style="background:{lvl_color}18; color:{lvl_color}; border:1px solid {lvl_color}30;">{level}</span>
+                        <span class="chat-citation-service">{cit.get('service')}</span>:
+                        <span class="chat-citation-msg">{cit.get('message')}</span>
                     </div>
-                    """, unsafe_allow_html=True)
+                    """
                 
-                st.session_state.messages.append({"role": "assistant", "content": answer, "citations": citations})
-                st.markdown("</div></div>", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="chat-citation-header">
+                    <div class="chat-citation-title"><i class="fa-solid fa-database"></i> Cited Source Telemetry</div>
+                    <div class="chat-citation-console">
+                        {cit_rows}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.session_state.messages.append({"role": "assistant", "content": answer, "citations": citations})
+            st.markdown("</div></div>", unsafe_allow_html=True)
 
 
 with tab_architect:
