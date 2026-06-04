@@ -1973,11 +1973,6 @@ if github_token_input:
     st.session_state["github_token"] = github_token_input
 
 azure_configured = False
-if RAG_AVAILABLE and os.getenv("AZURE_OPENAI_API_KEY") and os.getenv("AZURE_SEARCH_ENDPOINT"):
-    azure_configured = True
-    st.sidebar.success("Azure Search & OpenAI Connected!")
-else:
-    st.sidebar.warning("Running in LOCAL MOCK Mode (No Azure keys)")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### <i class='fa-solid fa-arrows-rotate' style='color:#10b981;'></i> Auto-Refresh", unsafe_allow_html=True)
