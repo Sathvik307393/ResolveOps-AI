@@ -2065,6 +2065,71 @@ if st.sidebar.button("Reset In-Memory Databases & Logs"):
     st.sidebar.success("Telemetry logs database cleared!")
 
 # ─────────────────────────────────────────────
+#  Auth & SaaS Platform Layout
+# ─────────────────────────────────────────────
+if "jwt_token" not in st.session_state:
+    st.session_state.jwt_token = None
+
+api_base_url = os.environ.get("API_URL", "http://nexus-api:8000")
+# Fallback for local dev
+try:
+    requests.get(api_base_url, timeout=0.5)
+except:
+    api_base_url = "http://localhost:8000"
+
+if not st.session_state.jwt_token:
+    st.markdown("<div style='text-align: center; margin-top: 50px;'><i class='fa-solid fa-microchip' style='font-size: 4rem; color: #6366f1;'></i><h1 style='color: #e2e8f0;'>Nexus SRE SaaS Platform</h1><p style='color: #94a3b8;'>Please login or register to access your workspace.</p></div>", unsafe_allow_html=True)
+    
+    col_l, col_m, col_r = st.columns([3, 4, 3])
+    with col_m:
+        auth_tab1, auth_tab2 = st.tabs(["Login", "Register"])
+        
+        with auth_tab1:
+            login_email = st.text_input("Email", key="login_email")
+            login_password = st.text_input("Password", type="password", key="login_password")
+            if st.button("Login", use_container_width=True):
+                try:
+                    res = requests.post(f"{api_base_url}/login", json={"email": login_email, "password": login_password})
+                    if res.status_code == 200:
+                        st.session_state.jwt_token = res.json()["token"]
+                        st.rerun()
+                    else:
+                        st.error(res.json().get("detail", "Login failed"))
+                except Exception as e:
+                    st.error(f"Error connecting to API backend: {e}")
+                    
+        with auth_tab2:
+            reg_email = st.text_input("Email", key="reg_email")
+            reg_password = st.text_input("Password", type="password", key="reg_password")
+            if st.button("Register", use_container_width=True):
+                try:
+                    res = requests.post(f"{api_base_url}/register", json={"email": reg_email, "password": reg_password})
+                    if res.status_code == 200:
+                        st.success("Registered successfully! Please login.")
+                    else:
+                        st.error(res.json().get("detail", "Registration failed"))
+                except Exception as e:
+                    st.error(f"Error connecting to API backend: {e}")
+    st.stop()
+
+# --- SaaS API Keys Sidebar Tab ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("### <i class='fa-solid fa-key' style='color:#a855f7;'></i> API Keys & Integration", unsafe_allow_html=True)
+if st.sidebar.button("Generate New API Key"):
+    try:
+        res = requests.post(f"{api_base_url}/api/keys/generate", headers={"Authorization": f"Bearer {st.session_state.jwt_token}"})
+        if res.status_code == 200:
+            st.sidebar.success(f"Generated: {res.json()['key']}")
+        else:
+            st.sidebar.error("Failed to generate key")
+    except Exception as e:
+        st.sidebar.error(str(e))
+
+if st.sidebar.button("Logout"):
+    st.session_state.jwt_token = None
+    st.rerun()
+
+# ─────────────────────────────────────────────
 #  Main Board Layout
 # ─────────────────────────────────────────────
 st.markdown("<h1><i class='fa-solid fa-shield-halved' style='color:#ff5722; margin-right:12px;'></i> AI-Powered DevOps SRE Console</h1>", unsafe_allow_html=True)

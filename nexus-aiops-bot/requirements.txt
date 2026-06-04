@@ -16,3 +16,4 @@ langchain-community
 pydantic>=2.7.2
 pandas>=2.2.2
 plotly>=5.22.0
+sqlalchemy>=2.0.0
