@@ -51,57 +51,67 @@ class ApiKeyResponse(BaseModel):
 # --- Auth Endpoints (DynamoDB) ---
 @app.post("/register")
 def register_user(user: UserAuth):
-    users_table = get_users_table()
-    
-    # Check if user exists
-    response = users_table.get_item(Key={'email': user.email})
-    if 'Item' in response:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    hashed_password = pwd_context.hash(user.password)
-    user_id = str(uuid.uuid4())
-    
-    # Save user
-    users_table.put_item(Item={
-        'email': user.email,
-        'user_id': user_id,
-        'hashed_password': hashed_password,
-        'created_at': datetime.datetime.utcnow().isoformat()
-    })
-    
-    # Generate default API key
-    keys_table = get_keys_table()
-    default_key = "nx_live_" + str(uuid.uuid4()).replace("-", "")
-    keys_table.put_item(Item={
-        'api_key': default_key,
-        'user_id': user_id,
-        'email': user.email,
-        'name': "Default Integration Key",
-        'is_active': True,
-        'created_at': datetime.datetime.utcnow().isoformat()
-    })
-    
-    return {"message": "User registered successfully"}
+    try:
+        users_table = get_users_table()
+        
+        # Check if user exists
+        response = users_table.get_item(Key={'email': user.email})
+        if 'Item' in response:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        
+        hashed_password = pwd_context.hash(user.password)
+        user_id = str(uuid.uuid4())
+        
+        # Save user
+        users_table.put_item(Item={
+            'email': user.email,
+            'user_id': user_id,
+            'hashed_password': hashed_password,
+            'created_at': datetime.datetime.utcnow().isoformat()
+        })
+        
+        # Generate default API key
+        keys_table = get_keys_table()
+        default_key = "nx_live_" + str(uuid.uuid4()).replace("-", "")
+        keys_table.put_item(Item={
+            'api_key': default_key,
+            'user_id': user_id,
+            'email': user.email,
+            'name': "Default Integration Key",
+            'is_active': True,
+            'created_at': datetime.datetime.utcnow().isoformat()
+        })
+        
+        return {"message": "User registered successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database Error: {str(e)}")
 
 @app.post("/login")
 def login_user(user: UserAuth):
-    users_table = get_users_table()
-    response = users_table.get_item(Key={'email': user.email})
-    
-    if 'Item' not in response:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    try:
+        users_table = get_users_table()
+        response = users_table.get_item(Key={'email': user.email})
         
-    db_user = response['Item']
-    if not pwd_context.verify(user.password, db_user['hashed_password']):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    
-    token = jwt.encode({
-        "user_id": db_user['user_id'],
-        "email": db_user['email'],
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=24)
-    }, JWT_SECRET, algorithm="HS256")
-    
-    return {"token": token}
+        if 'Item' not in response:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+            
+        db_user = response['Item']
+        if not pwd_context.verify(user.password, db_user['hashed_password']):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        token = jwt.encode({
+            "user_id": db_user['user_id'],
+            "email": db_user['email'],
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+        }, JWT_SECRET, algorithm="HS256")
+        
+        return {"token": token}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database Error: {str(e)}")
 
 # --- Protected API Key Endpoints (DynamoDB) ---
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
