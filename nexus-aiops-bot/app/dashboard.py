@@ -2836,8 +2836,8 @@ with tab_chat:
         current_hour = datetime.now().hour
         greeting = "Good morning" if current_hour < 12 else "Good afternoon" if current_hour < 18 else "Good evening"
         st.markdown(f"<h3 style='margin-bottom:0.25rem; border:none; text-shadow:none; text-transform:none; padding-bottom:0;'><i class='fa-solid fa-robot' style='color:#10b981; margin-right:8px;'></i> {greeting}, I am Nexus SRE Co-Pilot!</h3>", unsafe_allow_html=True)
-        if azure_configured:
-            st.markdown('<span style="background-color: rgba(16, 185, 129, 0.12); color: #10b981; padding: 4px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: bold; border: 1px solid rgba(16, 185, 129, 0.25); display: inline-block; margin-bottom:1rem;">● RAG Connected (Azure OpenAI)</span>', unsafe_allow_html=True)
+        if aws_configured:
+            st.markdown('<span style="background-color: rgba(16, 185, 129, 0.12); color: #10b981; padding: 4px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: bold; border: 1px solid rgba(16, 185, 129, 0.25); display: inline-block; margin-bottom:1rem;">● RAG Connected (OpenAI)</span>', unsafe_allow_html=True)
         else:
             st.markdown('<span style="background-color: rgba(251, 191, 36, 0.12); color: #fbbf24; padding: 4px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: bold; border: 1px solid rgba(251, 191, 36, 0.25); display: inline-block; margin-bottom:1rem;">● Fallback Mode (Local DevOps Rulebase)</span>', unsafe_allow_html=True)
     with header_col2:
@@ -3086,7 +3086,7 @@ Please verify that:
 """
                     citations = []
                     
-                elif azure_configured:
+                elif aws_configured:
                     try:
                         engine = LogRageEngine()
                         result = engine.run_query(query_to_run)
@@ -3116,9 +3116,9 @@ We analyzed the signature of your query and matched it to a **{diag_res['type']}
 All systems are reporting healthy. If you are currently troubleshooting an incident, please select an anomaly scenario in the left sidebar to generate error traces.
 """
                         citations = []
-                        azure_configured = False
+                        aws_configured = False
                         
-                if not is_pipeline_query and not is_k8s_query and not azure_configured and not answer:
+                if not is_pipeline_query and not is_k8s_query and not aws_configured and not answer:
                     time.sleep(1.2)
                     relevant_logs = load_local_logs()
                     local_incidents = load_local_incidents()
