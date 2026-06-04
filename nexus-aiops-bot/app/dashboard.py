@@ -2706,7 +2706,9 @@ with tab_chat:
     # 1. Chat Header and Status Badge
     header_col1, header_col2 = st.columns([7, 3])
     with header_col1:
-        st.markdown("<h3 style='margin-bottom:0.25rem; border:none; text-shadow:none; text-transform:none; padding-bottom:0;'><i class='fa-solid fa-comments' style='color:#10b981; margin-right:8px;'></i> AI SRE Incident Assistant</h3>", unsafe_allow_html=True)
+        current_hour = datetime.now().hour
+        greeting = "Good morning" if current_hour < 12 else "Good afternoon" if current_hour < 18 else "Good evening"
+        st.markdown(f"<h3 style='margin-bottom:0.25rem; border:none; text-shadow:none; text-transform:none; padding-bottom:0;'><i class='fa-solid fa-robot' style='color:#10b981; margin-right:8px;'></i> {greeting}, I am Nexus SRE Co-Pilot!</h3>", unsafe_allow_html=True)
         if azure_configured:
             st.markdown('<span style="background-color: rgba(16, 185, 129, 0.12); color: #10b981; padding: 4px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: bold; border: 1px solid rgba(16, 185, 129, 0.25); display: inline-block; margin-bottom:1rem;">● RAG Connected (Azure OpenAI)</span>', unsafe_allow_html=True)
         else:
@@ -2772,8 +2774,8 @@ with tab_chat:
     if not st.session_state.messages:
         st.markdown(f"""
         <div class="chat-welcome-container">
-            <div style="font-size: 3rem; color: #6366f1; margin-bottom: 1rem;"><i class="fa-solid fa-user-astronaut"></i></div>
-            <div class="chat-welcome-title">AI SRE Incident Co-Pilot</div>
+            <div style="font-size: 3.5rem; color: #6366f1; margin-bottom: 1rem;"><i class="fa-solid fa-microchip"></i> <i class="fa-solid fa-bolt" style="color: #fbbf24;"></i></div>
+            <div class="chat-welcome-title">Nexus SRE Co-Pilot</div>
             <div class="chat-welcome-subtitle">Ask the operational RAG about active alerts, deployment failures, or cluster status.</div>
             <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; font-weight: 700; margin-bottom: 1rem;">Suggested Queries</div>
         </div>
