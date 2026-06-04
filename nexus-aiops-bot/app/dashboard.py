@@ -2391,7 +2391,7 @@ def show_k8s_tab():
         <div class="custom-alert success">
             <span class="alert-icon"><i class="fa-solid fa-bolt-lightning"></i></span>
             <div class="alert-content">
-                <strong>AKS Live Link Active:</strong> Showing real-time pod telemetry in namespace <code>log-analysis</code>.
+                <strong>Kubernetes Live Link Active:</strong> Showing real-time pod telemetry in namespace <code>log-analysis</code>.
             </div>
         </div>
         """), unsafe_allow_html=True)
@@ -2401,7 +2401,7 @@ def show_k8s_tab():
         <div class="custom-alert warning">
             <span class="alert-icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
             <div class="alert-content">
-                <strong>Simulated Telemetry Mode:</strong> Could not connect to live AKS cluster. Displaying high-fidelity local pod mocks.
+                <strong>Simulated Telemetry Mode:</strong> Could not connect to live Kubernetes cluster. Displaying high-fidelity local pod mocks.
             </div>
         </div>
         """), unsafe_allow_html=True)
