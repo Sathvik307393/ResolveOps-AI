@@ -43,6 +43,117 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+st.markdown("""
+<style>
+/* Import premium font */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
+
+/* Global Styles */
+html, body, [class*="css"]  {
+    font-family: 'Outfit', sans-serif !important;
+    background-color: #0b0f19 !important; /* Deep dark blue */
+    color: #e2e8f0 !important;
+}
+
+/* Base Gradient Background */
+.stApp {
+    background: radial-gradient(circle at 15% 50%, rgba(31, 58, 147, 0.1), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(138, 43, 226, 0.05), transparent 25%);
+    background-color: #0b0f19;
+    background-attachment: fixed;
+}
+
+/* Glassmorphism Sidebar */
+[data-testid="stSidebar"] {
+    background: rgba(15, 23, 42, 0.6) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Buttons */
+.stButton > button {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+    color: white !important;
+    border-radius: 8px !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+    transition: all 0.2s ease-in-out !important;
+    font-weight: 600 !important;
+    padding: 0.5rem 1rem !important;
+}
+.stButton > button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3) !important;
+    border-color: rgba(255,255,255,0.3) !important;
+}
+
+/* Text Inputs & Tabs */
+.stTextInput > div > div > input {
+    background-color: rgba(30, 41, 59, 0.7) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    border-radius: 8px !important;
+    color: white !important;
+    transition: all 0.2s !important;
+}
+.stTextInput > div > div > input:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Cards & Expanders */
+.streamlit-expanderHeader {
+    background-color: rgba(30, 41, 59, 0.5) !important;
+    border-radius: 8px !important;
+    border: 1px solid rgba(255,255,255,0.05) !important;
+}
+
+/* Chat Messages */
+.stChatMessage {
+    background: rgba(30, 41, 59, 0.6) !important;
+    backdrop-filter: blur(8px) !important;
+    border: 1px solid rgba(255,255,255,0.05) !important;
+    border-radius: 12px !important;
+    padding: 1.5rem !important;
+    margin-bottom: 1rem !important;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1) !important;
+}
+.stChatMessage[data-testid="stChatMessage-user"] {
+    background: rgba(59, 130, 246, 0.1) !important;
+    border: 1px solid rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Badges & Metrics */
+[data-testid="stMetricValue"] {
+    font-size: 2rem !important;
+    font-weight: 800 !important;
+    background: -webkit-linear-gradient(45deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* Glowing Headers */
+h1 {
+    font-weight: 800 !important;
+    letter-spacing: -0.02em !important;
+    text-shadow: 0 0 20px rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Alert Boxes */
+div[data-testid="stAlert"] {
+    border-radius: 10px !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    backdrop-filter: blur(5px) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # File path to store local logs & incidents for Mock Mode
 LOCAL_LOGS_FILE = "local_logs.json"
 LOCAL_INCIDENTS_FILE = "local_incidents.json"
