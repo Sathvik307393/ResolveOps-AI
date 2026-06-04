@@ -18,9 +18,9 @@ import plotly.express as px
 import threading
 import uuid
 
-# Try to import Azure Table client
+# Try to import AWS DynamoDB client
 try:
-    from azure.data.tables import TableClient
+    import boto3
     TABLES_AVAILABLE = True
 except Exception:
     TABLES_AVAILABLE = False
@@ -33,8 +33,7 @@ except Exception as e:
     RAG_AVAILABLE = False
     RAG_ERROR_DETAILS = str(e)
 
-AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-AZURE_SEARCH_ENDPOINT = os.getenv("AZURE_SEARCH_ENDPOINT") or os.getenv("AZURE_SEARCH_SERVICE_ENDPOINT")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Streamlit App Styling
 st.set_page_config(
@@ -55,19 +54,19 @@ last_processed_count = 0
 last_batch_time = time.time()
 
 def load_local_incidents():
-    conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-    if TABLES_AVAILABLE and conn_str:
+    if TABLES_AVAILABLE and os.getenv("AWS_ACCESS_KEY_ID"):
         try:
-            client = TableClient.from_connection_string(conn_str=conn_str, table_name="incidents")
-            entities = list(client.list_entities())
+            dynamodb = boto3.resource('dynamodb', region_name=os.getenv("AWS_REGION", "us-east-1"))
+            table = dynamodb.Table("nexus-incidents")
+            response = table.scan()
+            entities = response.get('Items', [])
             results = []
             for e in entities:
-                incident = dict(e)
-                results.append(incident)
+                results.append(e)
             results.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
             return results
         except Exception as e:
-            st.sidebar.error(f"Failed to fetch live incidents from Azure Table Storage: {e}")
+            st.sidebar.error(f"Failed to fetch live incidents from AWS DynamoDB: {e}")
             return []
             
     if os.path.exists(LOCAL_INCIDENTS_FILE):
@@ -1958,10 +1957,16 @@ def uuid_uuid4():
 # ─────────────────────────────────────────────
 #  Sidebar Controls
 # ─────────────────────────────────────────────
-st.sidebar.markdown("<div style='text-align:center;'><h2 style='border-left:none; padding-left:0; font-size:1.8rem; color:#ff5722;'><i class='fa-solid fa-shield-halved'></i> Nexus AIOps SRE</h2></div>", unsafe_allow_html=True)
+# AWS & AI Configurations
+st.sidebar.markdown("### <i class='fa-brands fa-aws' style='color:#ff9900;'></i> AWS & AI Status", unsafe_allow_html=True)
 
-# Azure Configurations
-st.sidebar.markdown("### <i class='fa-brands fa-microsoft' style='color:#00a4ef;'></i> Azure RAG Status", unsafe_allow_html=True)
+aws_configured = False
+if RAG_AVAILABLE and OPENAI_API_KEY:
+    aws_configured = True
+    st.sidebar.success("OpenAI & AWS Connected!")
+else:
+    st.sidebar.warning("Running in LOCAL MOCK Mode (No API keys)")
+
 gateway_url = st.sidebar.text_input("API Gateway URL", "http://localhost:5000")
 github_token_input = st.sidebar.text_input("GitHub Token (Optional)", value=os.getenv("GITHUB_TOKEN", ""), type="password", help="Enter a GitHub PAT to avoid API rate limiting")
 if github_token_input:
@@ -3174,21 +3179,28 @@ If you are currently troubleshooting an incident, please select an anomaly scena
 
 with tab_architect:
     st.markdown("### ☁️ Cloud Architecture Analyzer")
-    st.markdown("This AI assistant will analyze your current Azure resource group and recommend architectural improvements based on your application type.")
+    st.markdown("This AI assistant will analyze your current AWS EC2 instances and recommend architectural improvements based on your application type.")
     
     app_type = st.text_input("What type of application are you building? (e.g. Microservices, Monolithic web app, Data Pipeline)", "")
-    if st.button("Scan Azure & Analyze Architecture"):
+    if st.button("Scan AWS & Analyze Architecture"):
         if app_type:
-            with st.spinner("Scanning Azure Resource Group 'log_analysis-rg'..."):
-                import subprocess
+            with st.spinner("Scanning AWS EC2 Instances..."):
                 try:
-                    # Quick fallback to CLI for resource list to avoid complex MSAL auth setups in streamlit
-                    result = subprocess.run(["az", "resource", "list", "--resource-group", "log_analysis-rg", "--output", "json"], capture_output=True, text=True)
-                    if result.returncode == 0:
-                        resources = json.loads(result.stdout)
-                        resource_summary = "\\n".join([f"- {r.get('name')} ({r.get('type')})" for r in resources])
+                    if not os.getenv("AWS_ACCESS_KEY_ID"):
+                        st.error("AWS credentials not found in environment.")
+                    else:
+                        ec2 = boto3.client('ec2', region_name=os.getenv("AWS_REGION", "us-east-1"))
+                        response = ec2.describe_instances()
+                        resources = []
+                        for reservation in response.get('Reservations', []):
+                            for instance in reservation.get('Instances', []):
+                                state = instance.get('State', {}).get('Name')
+                                type = instance.get('InstanceType')
+                                resources.append(f"EC2 Instance ({type}) - State: {state}")
                         
-                        prompt = f"I am building a {app_type}. My current Azure Resource Group contains:\\n{resource_summary}\\n\\nBased on Azure Well-Architected Framework best practices, analyze this architecture and recommend any missing components, security fixes, or cost optimizations."
+                        resource_summary = "\\n".join(resources) if resources else "No EC2 instances found."
+                        
+                        prompt = f"I am building a {app_type}. My current AWS infrastructure contains:\\n{resource_summary}\\n\\nBased on AWS Well-Architected Framework best practices, analyze this architecture and recommend any missing components, security fixes, or cost optimizations."
                         
                         if RAG_AVAILABLE:
                             engine = LogRageEngine()
@@ -3197,10 +3209,8 @@ with tab_architect:
                             st.markdown(response.content)
                         else:
                             st.error("RAG Engine unavailable. Could not generate AI recommendations.")
-                    else:
-                        st.error(f"Failed to scan resources: {result.stderr}")
                 except Exception as e:
-                    st.error(f"Error accessing Azure: {e}")
+                    st.error(f"Error accessing AWS: {e}")
         else:
             st.warning("Please enter the type of application you are building.")
 

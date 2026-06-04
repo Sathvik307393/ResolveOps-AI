@@ -1,136 +1,65 @@
 import os
+import json
 from datetime import datetime, timedelta
-from azure.core.credentials import AzureKeyCredential
-from azure.search.documents import SearchClient
-from openai import AzureOpenAI
-from langchain_openai import AzureChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_community.vectorstores import FAISS
+from langchain_core.documents import Document
 
 # Configuration is retrieved dynamically during instantiation to avoid cached imports
 class LogRageEngine:
     def __init__(self):
-        # Retrieve Azure OpenAI Credentials
-        api_key = os.getenv("AZURE_OPENAI_API_KEY")
-        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-        api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
-        chat_deployment = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "gpt-5.3-chat")
-        self.embedding_deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-large")
-
-        # Retrieve Azure AI Search Credentials
-        search_endpoint = os.getenv("AZURE_SEARCH_SERVICE_ENDPOINT")
-        search_admin_key = os.getenv("AZURE_SEARCH_ADMIN_KEY")
-        search_index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "devops-logs-index")
-
-        # Initialize Azure OpenAI Client for Embeddings
-        self.openai_client = AzureOpenAI(
+        # Retrieve OpenAI Credentials
+        api_key = os.getenv("OPENAI_API_KEY")
+        
+        # Initialize Embeddings
+        self.embeddings = OpenAIEmbeddings(
             api_key=api_key,
-            api_version=api_version,
-            azure_endpoint=endpoint
+            model="text-embedding-3-large"
         )
         
-        # Initialize LangChain Azure OpenAI Client for Chat Synthesis
-        self.chat_model = AzureChatOpenAI(
-            azure_deployment=chat_deployment,
+        # Initialize Chat Model
+        self.chat_model = ChatOpenAI(
+            model="gpt-4o",
             api_key=api_key,
-            azure_endpoint=endpoint,
-            api_version=api_version,
             temperature=0.1
         )
         
-        # Initialize Search Client
-        self.search_client = SearchClient(
-            endpoint=search_endpoint,
-            index_name=search_index_name,
-            credential=AzureKeyCredential(search_admin_key)
-        )
-        
-    def _get_embedding(self, text: str) -> list:
-        response = self.openai_client.embeddings.create(
-            model=self.embedding_deployment,
-            input=text
-        )
-        return response.data[0].embedding
+        self.vector_store = None
 
     def run_query(self, query: str, time_window_mins: int = 30) -> dict:
         """Runs vector search on log indexes and performs root cause analysis with GPT-4o"""
-        # Generate query embedding
-        query_vector = self._get_embedding(query)
         
-        # Build filter for time window (if specified)
-        filter_expr = None
-        if time_window_mins:
-            cutoff_time = (datetime.utcnow() - timedelta(minutes=time_window_mins)).isoformat() + "Z"
-            filter_expr = f"timestamp ge {cutoff_time}"
-
-        # Search Azure AI Search index
-        # We do a Vector Search (using VectorizableTextQuery or direct vectors)
-        try:
-            results = self.search_client.search(
-                search_text=query,
-                vector_queries=[{
-                    "vector": query_vector,
-                    "fields": "vector",
-                    "k": 15,
-                    "kind": "vector"
-                }],
-                filter=filter_expr,
-                top=15
-            )
+        retrieved_logs = []
+        current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        local_logs_path = os.path.join(current_dir, "local_logs.json")
+        if not os.path.exists(local_logs_path):
+            local_logs_path = "local_logs.json"
             
-            retrieved_logs = []
-            for r in results:
-                retrieved_logs.append({
-                    "id": r.get("id"),
-                    "timestamp": r.get("timestamp"),
-                    "service": r.get("service"),
-                    "level": r.get("level"),
-                    "message": r.get("message"),
-                    "latency_ms": r.get("latency_ms"),
-                    "status_code": r.get("status_code"),
-                    "request_id": r.get("request_id"),
-                    "formatted_log": r.get("formatted_log")
-                })
-        except Exception as e:
-            # Fallback for local simulation mode or if connection fails
-            return {
-                "answer": f"Retrieval Error: Could not connect to Azure AI Search. Details: {str(e)}",
-                "citations": []
-            }
-
-        if not retrieved_logs:
-            # Fallback to loading local logs so GPT-4o has actual telemetry context
-            import json
-            # Find project root directory containing local_logs.json
-            current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            local_logs_path = os.path.join(current_dir, "local_logs.json")
-            if not os.path.exists(local_logs_path):
-                local_logs_path = "local_logs.json"
-                
-            if os.path.exists(local_logs_path):
-                try:
-                    with open(local_logs_path, "r") as f:
-                        local_logs = json.load(f)
-                    if local_logs:
-                        # Try to find logs matching query keywords
-                        keywords = [w.lower() for w in query.split() if len(w) > 3]
-                        matched = []
-                        if keywords:
-                            for log in local_logs:
-                                msg = log.get("message", "").lower()
-                                svc = log.get("service", "").lower()
-                                if any(kw in msg or kw in svc for kw in keywords):
-                                    matched.append(log)
-                        # Fallback to latest 30 logs if no keyword match
-                        retrieved_logs = matched[-30:] if matched else local_logs[-30:]
-                except Exception:
-                    pass
+        if os.path.exists(local_logs_path):
+            try:
+                with open(local_logs_path, "r") as f:
+                    local_logs = json.load(f)
+                if local_logs:
+                    # FAISS Vector Search Implementation
+                    docs = [Document(page_content=json.dumps(log)) for log in local_logs]
+                    if not self.vector_store:
+                        self.vector_store = FAISS.from_documents(docs, self.embeddings)
+                    
+                    results = self.vector_store.similarity_search(query, k=15)
+                    retrieved_logs = [json.loads(d.page_content) for d in results]
+            except Exception as e:
+                return {
+                    "answer": f"Retrieval Error: FAISS search failed. Details: {str(e)}",
+                    "citations": []
+                }
 
         # Build context from logs
         if retrieved_logs:
             context_str = "\n".join([
-                f"- [{log['timestamp']}] Service: {log['service']} | Level: {log['level']} | Message: {log['message']} "
-                f"| Status: {log['status_code']} | Latency: {log['latency_ms']}ms | ReqID: {log['request_id']}"
+                f"- [{log.get('timestamp', '')}] Service: {log.get('service', '')} | Level: {log.get('level', '')} | Message: {log.get('message', '')} "
+                f"| Status: {log.get('status_code', '')} | Latency: {log.get('latency_ms', '')}ms | ReqID: {log.get('request_id', '')}"
                 for log in retrieved_logs
             ])
         else:
@@ -143,7 +72,7 @@ class LogRageEngine:
             "related to DevOps, AI, development, deployment, and security (e.g. DAST scans, CI/CD, etc.).\n\n"
             "Format the response using professional markdown with headers, bullet points, and code blocks. "
             "Do NOT use simple placeholders. Localize all money mentions in Indian Rupees (₹).\n\n"
-            "Here is the context representing the retrieved logs from Azure AI Search (if any):\n"
+            "Here is the context representing the retrieved logs from FAISS Vector Store (if any):\n"
             "---CONTEXT START---\n"
             "{context}\n"
             "---CONTEXT END---\n\n"
@@ -172,7 +101,7 @@ class LogRageEngine:
                 "query": query
             })
         except Exception as chat_ex:
-            answer = f"Synthesis Error: Could not generate response via Azure OpenAI. Details: {str(chat_ex)}"
+            answer = f"Synthesis Error: Could not generate response via OpenAI. Details: {str(chat_ex)}"
             
         return {
             "answer": answer,

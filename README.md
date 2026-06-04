@@ -14,18 +14,13 @@ Nexus AIOps is an intelligent, all-in-one DevSecOps platform designed to act as 
 Since the Nexus AIOps bot is fully containerized, you can deploy it quickly to any cloud provider. Here is how to easily run it on a Free-Tier AWS Ubuntu EC2 instance:
 
 ### 1. Prerequisites
-You will need your Azure credentials to connect the bot to your cloud logs and the GPT-4o models. Create an `.env` file in the root directory containing:
+You will need your standard OpenAI key and your AWS credentials to connect the bot to your cloud infrastructure. Create an `.env` file in the root directory containing:
 
 ```env
-AZURE_OPENAI_API_KEY=your_key
-AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com/
-AZURE_OPENAI_API_VERSION=2024-02-15-preview
-AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-4o
-AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-large
-AZURE_SEARCH_SERVICE_ENDPOINT=https://your-search.search.windows.net
-AZURE_SEARCH_ADMIN_KEY=your_search_key
-AZURE_SEARCH_INDEX_NAME=devops-logs-index
-AZURE_STORAGE_CONNECTION_STRING=your_table_storage_connection_string
+OPENAI_API_KEY=your_openai_key
+AWS_ACCESS_KEY_ID=your_aws_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret
+AWS_REGION=us-east-1
 GITHUB_TOKEN=your_github_pat
 ```
 

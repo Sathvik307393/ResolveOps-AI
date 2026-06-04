@@ -5,10 +5,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Azure CLI for the Architecture Analyzer feature
-RUN apt-get update && apt-get install -y curl && \
-    curl -sL https://aka.ms/InstallAzureCLIDeb | bash && \
-    apt-get clean
+# Install curl
+RUN apt-get update && apt-get install -y curl
 
 COPY . .
 
