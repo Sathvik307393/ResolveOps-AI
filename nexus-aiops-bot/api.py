@@ -6,6 +6,7 @@ from rag.rag_engine import LogRageEngine
 from typing import Optional, List
 import jwt
 import datetime
+import hashlib
 from passlib.context import CryptContext
 import uuid
 import boto3
@@ -30,6 +31,14 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
 JWT_SECRET = "super_secret_jwt_key_for_nexus_saas"
+
+def get_password_hash(password: str) -> str:
+    sha_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
+    return pwd_context.hash(sha_hash)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    sha_hash = hashlib.sha256(plain_password.encode('utf-8')).hexdigest()
+    return pwd_context.verify(sha_hash, hashed_password)
 
 # --- Models ---
 class UserAuth(BaseModel):
@@ -59,7 +68,7 @@ def register_user(user: UserAuth):
         if 'Item' in response:
             raise HTTPException(status_code=400, detail="Email already registered")
         
-        hashed_password = pwd_context.hash(user.password)
+        hashed_password = get_password_hash(user.password)
         user_id = str(uuid.uuid4())
         
         # Save user
@@ -98,7 +107,7 @@ def login_user(user: UserAuth):
             raise HTTPException(status_code=401, detail="Invalid credentials")
             
         db_user = response['Item']
-        if not pwd_context.verify(user.password, db_user['hashed_password']):
+        if not verify_password(user.password, db_user['hashed_password']):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         
         token = jwt.encode({
