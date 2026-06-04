@@ -1973,7 +1973,7 @@ if github_token_input:
     st.session_state["github_token"] = github_token_input
 
 azure_configured = False
-if RAG_AVAILABLE and AZURE_OPENAI_API_KEY and AZURE_SEARCH_ENDPOINT:
+if RAG_AVAILABLE and os.getenv("AZURE_OPENAI_API_KEY") and os.getenv("AZURE_SEARCH_ENDPOINT"):
     azure_configured = True
     st.sidebar.success("Azure Search & OpenAI Connected!")
 else:
