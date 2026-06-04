@@ -33,12 +33,11 @@ security = HTTPBearer()
 JWT_SECRET = "super_secret_jwt_key_for_nexus_saas"
 
 def get_password_hash(password: str) -> str:
-    sha_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
-    return pwd_context.hash(sha_hash)
+    # Use pure SHA-256 to absolutely guarantee no passlib 72-byte length crashes
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    sha_hash = hashlib.sha256(plain_password.encode('utf-8')).hexdigest()
-    return pwd_context.verify(sha_hash, hashed_password)
+    return hashlib.sha256(plain_password.encode('utf-8')).hexdigest() == hashed_password
 
 # --- Models ---
 class UserAuth(BaseModel):
