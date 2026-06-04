@@ -49,9 +49,8 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
 
 /* Global Styles */
-html, body, [class*="css"]  {
+html, body, .stApp {
     font-family: 'Outfit', sans-serif !important;
-    background-color: #0b0f19 !important; /* Deep dark blue */
     color: #e2e8f0 !important;
 }
 
