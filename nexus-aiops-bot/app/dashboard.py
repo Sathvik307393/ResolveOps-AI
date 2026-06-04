@@ -1967,12 +1967,7 @@ if RAG_AVAILABLE and OPENAI_API_KEY:
 else:
     st.sidebar.warning("Running in LOCAL MOCK Mode (No API keys)")
 
-gateway_url = st.sidebar.text_input("API Gateway URL", "http://localhost:5000")
-github_token_input = st.sidebar.text_input("GitHub Token (Optional)", value=os.getenv("GITHUB_TOKEN", ""), type="password", help="Enter a GitHub PAT to avoid API rate limiting")
-if github_token_input:
-    st.session_state["github_token"] = github_token_input
 
-azure_configured = False
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### <i class='fa-solid fa-arrows-rotate' style='color:#10b981;'></i> Auto-Refresh", unsafe_allow_html=True)
@@ -2008,39 +2003,12 @@ anomaly_mapping = {
 }
 
 def inject_anomaly_into_services(scenario):
-    endpoint_suffix = {
-        "db_locked": "/api/inventory/simulate-anomaly",
-        "timeout": "/api/valuation/simulate-anomaly",
-        "brute_force": "/api/auth/simulate-anomaly"
-    }
-    
-    # Reset all services first
-    for svc_name in ["inventory", "valuation", "auth"]:
-        try:
-            requests.post(f"{gateway_url}/api/{svc_name}/simulate-anomaly", json={"db_error": False, "db_locked": False, "network_error": False, "latency_ms": 0}, timeout=1.0)
-        except: pass
-        
-    # Inject current anomaly
-    if scenario != "healthy":
-        svc_target = "inventory" if scenario == "db_locked" else ("valuation" if scenario == "timeout" else "auth")
-        payload = {}
-        if scenario == "db_locked":
-            payload = {"db_error": True, "latency_ms": 5000}
-        elif scenario == "timeout":
-            payload = {"network_error": True, "latency_ms": 2000}
-        elif scenario == "brute_force":
-            payload = {"db_locked": True} # Locks database to fail logins
-            
-        try:
-            r = requests.post(f"{gateway_url}/api/{svc_target}/simulate-anomaly", json=payload, timeout=2.0)
-            if r.status_code == 200:
-                st.sidebar.success(f"Anomaly '{scenario}' successfully injected into {svc_target}-service!")
-        except Exception as ex:
-            st.sidebar.error(f"Failed to reach microservice. Make sure docker-compose stack is running. Details: {str(ex)}")
-            
-    # Also generate logs for local logs buffer (useful for both Local Mock and live view)
+    # Generate logs for local logs buffer to simulate telemetry
     new_logs = generate_mock_logs(scenario)
     append_local_logs(new_logs)
+    
+    if scenario != "healthy":
+        st.sidebar.success(f"Anomaly '{scenario}' successfully injected into simulation environment!")
 
 if st.sidebar.button("Execute Ingestion / Anomaly Alert"):
     inject_anomaly_into_services(anomaly_mapping[active_anomaly])
@@ -2056,11 +2024,6 @@ if st.sidebar.button("Reset In-Memory Databases & Logs"):
         except: pass
     if os.path.exists(LOCAL_WARNING_QUEUE_FILE):
         try: os.remove(LOCAL_WARNING_QUEUE_FILE)
-        except: pass
-    # Clear services states
-    for svc_name in ["inventory", "valuation", "auth"]:
-        try:
-            requests.post(f"{gateway_url}/api/{svc_name}/simulate-anomaly", json={"db_error": False, "db_locked": False, "network_error": False, "latency_ms": 0}, timeout=1.0)
         except: pass
     st.sidebar.success("Telemetry logs database cleared!")
 
