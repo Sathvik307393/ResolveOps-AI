@@ -7,18 +7,22 @@ from typing import Optional, List
 import jwt
 import datetime
 from passlib.context import CryptContext
-from sqlalchemy.orm import Session
+import uuid
+import boto3
+from boto3.dynamodb.conditions import Key
 
-from database import engine as db_engine, Base, get_db
-import models
+from database import init_dynamodb, get_users_table, get_keys_table
 
-# Create database tables
-Base.metadata.create_all(bind=db_engine)
+# Initialize tables if they don't exist
+try:
+    init_dynamodb()
+except Exception as e:
+    print("Warning: Could not initialize DynamoDB tables (are AWS credentials set?):", e)
 
 app = FastAPI(
     title="NexusAI SaaS API",
-    description="Multi-tenant SaaS API for NexusAI",
-    version="2.0.0"
+    description="Multi-tenant SaaS API with DynamoDB Backend",
+    version="3.0.0"
 )
 
 engine = LogRageEngine()
@@ -44,81 +48,116 @@ class ApiKeyResponse(BaseModel):
     key: str
     name: str
 
-# --- Auth Endpoints ---
+# --- Auth Endpoints (DynamoDB) ---
 @app.post("/register")
-def register_user(user: UserAuth, db: Session = Depends(get_db)):
-    db_user = db.query(models.User).filter(models.User.email == user.email).first()
-    if db_user:
+def register_user(user: UserAuth):
+    users_table = get_users_table()
+    
+    # Check if user exists
+    response = users_table.get_item(Key={'email': user.email})
+    if 'Item' in response:
         raise HTTPException(status_code=400, detail="Email already registered")
     
     hashed_password = pwd_context.hash(user.password)
-    new_user = models.User(email=user.email, hashed_password=hashed_password)
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    user_id = str(uuid.uuid4())
     
-    # Auto-generate first API key
-    new_key = models.ApiKey(user_id=new_user.id, name="Default Integration Key")
-    db.add(new_key)
-    db.commit()
+    # Save user
+    users_table.put_item(Item={
+        'email': user.email,
+        'user_id': user_id,
+        'hashed_password': hashed_password,
+        'created_at': datetime.datetime.utcnow().isoformat()
+    })
+    
+    # Generate default API key
+    keys_table = get_keys_table()
+    default_key = "nx_live_" + str(uuid.uuid4()).replace("-", "")
+    keys_table.put_item(Item={
+        'api_key': default_key,
+        'user_id': user_id,
+        'email': user.email,
+        'name': "Default Integration Key",
+        'is_active': True,
+        'created_at': datetime.datetime.utcnow().isoformat()
+    })
     
     return {"message": "User registered successfully"}
 
 @app.post("/login")
-def login_user(user: UserAuth, db: Session = Depends(get_db)):
-    db_user = db.query(models.User).filter(models.User.email == user.email).first()
-    if not db_user or not pwd_context.verify(user.password, db_user.hashed_password):
+def login_user(user: UserAuth):
+    users_table = get_users_table()
+    response = users_table.get_item(Key={'email': user.email})
+    
+    if 'Item' not in response:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+    db_user = response['Item']
+    if not pwd_context.verify(user.password, db_user['hashed_password']):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     token = jwt.encode({
-        "user_id": db_user.id,
+        "user_id": db_user['user_id'],
+        "email": db_user['email'],
         "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=24)
     }, JWT_SECRET, algorithm="HS256")
     
     return {"token": token}
 
-# --- Protected API Key Endpoints ---
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+# --- Protected API Key Endpoints (DynamoDB) ---
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
-        user_id = payload.get("user_id")
-        user = db.query(models.User).filter(models.User.id == user_id).first()
-        if user is None:
-            raise HTTPException(status_code=401, detail="User not found")
-        return user
+        return payload  # Contains user_id and email
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 @app.get("/api/keys", response_model=List[ApiKeyResponse])
-def get_api_keys(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    keys = db.query(models.ApiKey).filter(models.ApiKey.user_id == current_user.id).all()
-    return [{"key": k.key, "name": k.name} for k in keys]
+def get_api_keys(current_user: dict = Depends(get_current_user)):
+    keys_table = get_keys_table()
+    user_id = current_user.get("user_id")
+    
+    response = keys_table.query(
+        IndexName='UserIdIndex',
+        KeyConditionExpression=Key('user_id').eq(user_id)
+    )
+    
+    keys = response.get('Items', [])
+    return [{"key": k['api_key'], "name": k.get('name', 'Key')} for k in keys if k.get('is_active', True)]
 
 @app.post("/api/keys/generate", response_model=ApiKeyResponse)
-def generate_api_key(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    new_key = models.ApiKey(user_id=current_user.id, name=f"Key {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    db.add(new_key)
-    db.commit()
-    db.refresh(new_key)
-    return {"key": new_key.key, "name": new_key.name}
-
-# --- Core Bot Endpoint (Secured via API Key) ---
-def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
-    # The client can pass the API key in the Bearer token field
-    api_key = credentials.credentials
-    key_record = db.query(models.ApiKey).filter(models.ApiKey.key == api_key, models.ApiKey.is_active == True).first()
+def generate_api_key(current_user: dict = Depends(get_current_user)):
+    keys_table = get_keys_table()
+    new_key_str = "nx_live_" + str(uuid.uuid4()).replace("-", "")
+    key_name = f"Key {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
     
-    if not key_record:
+    keys_table.put_item(Item={
+        'api_key': new_key_str,
+        'user_id': current_user.get("user_id"),
+        'email': current_user.get("email"),
+        'name': key_name,
+        'is_active': True,
+        'created_at': datetime.datetime.utcnow().isoformat()
+    })
+    
+    return {"key": new_key_str, "name": key_name}
+
+# --- Core Bot Endpoint (Secured via API Key in DynamoDB) ---
+def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    api_key = credentials.credentials
+    keys_table = get_keys_table()
+    
+    response = keys_table.get_item(Key={'api_key': api_key})
+    if 'Item' not in response or not response['Item'].get('is_active', True):
         raise HTTPException(status_code=401, detail="Invalid or revoked API Key")
-    return key_record.owner
+        
+    return response['Item']
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest, current_user: models.User = Depends(verify_api_key)):
+async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(verify_api_key)):
     try:
-        # In a real multi-tenant SaaS, you would scope the RAG query to current_user.id
-        # e.g. result = engine.run_query(request.query, request.time_window_mins, current_user.id)
+        # result = engine.run_query(request.query, request.time_window_mins, current_user['user_id'])
         result = engine.run_query(request.query, request.time_window_mins)
         return ChatResponse(
             answer=result.get("answer", ""),
