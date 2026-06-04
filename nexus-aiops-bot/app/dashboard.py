@@ -2300,35 +2300,16 @@ def show_console_tab():
     st.markdown("### <i class='fa-solid fa-bell-exclamation' style='color:#ef4444; margin-right:8px;'></i> Proactive AIOps Incident Alerts", unsafe_allow_html=True)
     
     incidents = []
-    if azure_configured and TABLES_AVAILABLE:
-        try:
-            incidents_table = TableClient.from_connection_string(
-                conn_str=os.getenv("AZURE_STORAGE_CONNECTION_STRING"),
-                table_name="incidents"
-            )
-            entities = list(incidents_table.list_entities())
-            for e in entities:
-                incidents.append({
-                    "timestamp": e.get("timestamp"),
-                    "service": e.get("service"),
-                    "severity": e.get("severity"),
-                    "message": e.get("message"),
-                    "answer": e.get("answer"),
-                    "citations": json.loads(e.get("citations", "[]"))
-                })
-        except Exception as e_table:
-            st.error(f"Failed to fetch proactive incidents from Azure Table: {str(e_table)}")
-    else:
-        local_inc = load_local_incidents()
-        for e in local_inc:
-            incidents.append({
-                "timestamp": e.get("timestamp"),
-                "service": e.get("service"),
-                "severity": e.get("severity"),
-                "message": e.get("message"),
-                "answer": e.get("answer"),
-                "citations": json.loads(e.get("citations")) if isinstance(e.get("citations"), str) else e.get("citations", [])
-            })
+    local_inc = load_local_incidents()
+    for e in local_inc:
+        incidents.append({
+            "timestamp": e.get("timestamp"),
+            "service": e.get("service"),
+            "severity": e.get("severity"),
+            "message": e.get("message"),
+            "answer": e.get("answer"),
+            "citations": json.loads(e.get("citations")) if isinstance(e.get("citations"), str) else e.get("citations", [])
+        })
     
     def sort_key(inc):
         sev_val = 0 if inc["severity"] == "CRITICAL" else 1
