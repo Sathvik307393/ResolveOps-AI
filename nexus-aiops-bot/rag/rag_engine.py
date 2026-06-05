@@ -1,7 +1,8 @@
 import os
 import json
+import boto3
 from datetime import datetime, timedelta
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_aws import ChatBedrock, BedrockEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.vectorstores import FAISS
@@ -10,26 +11,27 @@ from langchain_core.documents import Document
 # Configuration is retrieved dynamically during instantiation to avoid cached imports
 class LogRageEngine:
     def __init__(self):
-        # Retrieve OpenAI Credentials
-        api_key = os.getenv("OPENAI_API_KEY")
+        # Initialize Boto3 Client for Bedrock
+        aws_region = os.getenv("AWS_REGION", "us-east-1")
+        bedrock_client = boto3.client("bedrock-runtime", region_name=aws_region)
         
         # Initialize Embeddings
-        self.embeddings = OpenAIEmbeddings(
-            api_key=api_key,
-            model="text-embedding-3-large"
+        self.embeddings = BedrockEmbeddings(
+            client=bedrock_client,
+            model_id="amazon.titan-embed-text-v2:0"
         )
         
         # Initialize Chat Model
-        self.chat_model = ChatOpenAI(
-            model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o"),
-            api_key=api_key,
-            temperature=0.1
+        self.chat_model = ChatBedrock(
+            client=bedrock_client,
+            model_id=os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0"),
+            model_kwargs={"temperature": 0.1}
         )
         
         self.vector_store = None
 
     def run_query(self, query: str, time_window_mins: int = 30) -> dict:
-        """Runs vector search on log indexes and performs root cause analysis with GPT-4o"""
+        """Runs vector search on log indexes and performs root cause analysis with Claude 3"""
         
         retrieved_logs = []
         current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -33,7 +33,7 @@ except Exception as e:
     RAG_AVAILABLE = False
     RAG_ERROR_DETAILS = str(e)
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 
 # Streamlit App Styling
 st.set_page_config(
@@ -2073,7 +2073,7 @@ def uuid_uuid4():
 st.sidebar.markdown("### <i class='fa-brands fa-aws' style='color:#ff9900;'></i> AWS & AI Status", unsafe_allow_html=True)
 
 aws_configured = False
-if RAG_AVAILABLE and OPENAI_API_KEY:
+if RAG_AVAILABLE and AWS_ACCESS_KEY_ID:
     aws_configured = True
     st.sidebar.success("OpenAI & AWS Connected!")
 else:

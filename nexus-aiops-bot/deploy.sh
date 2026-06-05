@@ -46,9 +46,9 @@ else
 fi
 
 echo "Starting Docker Compose services..."
-# Make sure OPENAI_API_KEY is exported before running this script
-if [ -z "$OPENAI_API_KEY" ]; then
-    echo "WARNING: OPENAI_API_KEY is not set. The bot may fail to start correctly."
+# Make sure AWS credentials are exported before running this script
+if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+    echo "WARNING: AWS credentials are not fully set. The AWS Bedrock integration may fail."
 fi
 
 # We build and start the containers in detached mode
