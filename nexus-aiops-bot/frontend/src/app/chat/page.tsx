@@ -38,8 +38,8 @@ export default function AICopilot() {
     setSending(true);
 
     try {
-      // Fast API endpoint: /api/chat
-      const data = await fetchApi("/api/chat", {
+      // fetchApi base is already '/api', so this resolves to /api/chat on the server
+      const data = await fetchApi("/chat", {
         method: "POST",
         body: JSON.stringify({ query: userMsg, time_window_mins: 60 })
       });
