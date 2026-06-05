@@ -14,15 +14,12 @@ services:
     restart: always
 
   nexus-ui:
-    build: .
+    build: ./frontend
     container_name: nexus_ui
-    command: streamlit run app/dashboard.py --server.port 8501 --server.address 0.0.0.0
     ports:
-      - "8501:8501"
+      - "3000:3000"
     environment:
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - NEXT_PUBLIC_API_URL=https://nexusai.sathvikdevops.online/api
     restart: always
 
   nginx:
