@@ -23,7 +23,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const data = await fetchApi("/api/auth/login", {
+      const data = await fetchApi("/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
@@ -43,7 +43,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const data = await fetchApi("/api/auth/register", {
+      const data = await fetchApi("/register", {
         method: "POST",
         body: JSON.stringify({ email, password, company_name: company }),
       });
