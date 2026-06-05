@@ -1664,6 +1664,8 @@ def classify_devops_error(error_log):
 def get_git_repo_info():
     try:
         git_config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".git", "config")
+        if not os.path.exists(git_config_path):
+            git_config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".git", "config")
         if os.path.exists(git_config_path):
             with open(git_config_path, "r") as f:
                 content = f.read()
@@ -2223,7 +2225,7 @@ tab_console, tab_k8s, tab_suggestions, tab_chat, tab_architect = st.tabs([
     "Cloud Architect Analyzer"
 ])
 
-@st.fragment(run_every=refresh_interval if auto_refresh else None)
+# @st.fragment(run_every=refresh_interval if auto_refresh else None)
 def show_console_tab():
     st.markdown("A real-time operational RAG system connected to Azure Log Analytics, Event Hubs, and Azure AI Search.")
     
@@ -2439,7 +2441,7 @@ with tab_console:
     show_console_tab()
 
 
-@st.fragment(run_every=refresh_interval if auto_refresh else None)
+# @st.fragment(run_every=refresh_interval if auto_refresh else None)
 def show_k8s_tab():
     st.markdown("### <i class='fa-brands fa-kubernetes' style='color:#326ce5; margin-right:8px;'></i> Kubernetes Pod Cluster Watch", unsafe_allow_html=True)
     st.markdown("Monitor real-time pod replicas status, network configurations, and resource consumptions across the fleet.")
