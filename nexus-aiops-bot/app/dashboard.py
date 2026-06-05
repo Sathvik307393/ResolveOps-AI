@@ -46,110 +46,216 @@ st.set_page_config(
 st.markdown("""
 <style>
 /* Import premium font */
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap');
 
 /* Global Styles */
 html, body, .stApp {
-    font-family: 'Outfit', sans-serif !important;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
     color: #e2e8f0 !important;
+    background-color: #090A0F !important;
 }
 
-/* Base Gradient Background */
+/* Base Gradient Background - Deep Obsidian */
 .stApp {
-    background: radial-gradient(circle at 15% 50%, rgba(31, 58, 147, 0.1), transparent 25%),
-                radial-gradient(circle at 85% 30%, rgba(138, 43, 226, 0.05), transparent 25%);
-    background-color: #0b0f19;
-    background-attachment: fixed;
+    background: radial-gradient(circle at 10% 20%, rgba(79, 70, 229, 0.08), transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(124, 58, 237, 0.05), transparent 40%) !important;
+    background-attachment: fixed !important;
+}
+
+/* Header Adjustments */
+.reportview-container .main .block-container {
+    padding-top: 2.5rem;
+    max-width: 1400px;
+}
+h1 {
+    font-weight: 800 !important;
+    letter-spacing: -0.03em !important;
+    background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 2rem !important;
 }
 
 /* Glassmorphism Sidebar */
 [data-testid="stSidebar"] {
-    background: rgba(15, 23, 42, 0.6) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
+    background: rgba(10, 15, 30, 0.65) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
     border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+    color: #cbd5e1 !important;
+}
 
-/* Buttons */
-.stButton > button {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+/* Streamlit Tabs Navigation - Sleek Segmented Controls */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0;
+    background-color: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(16px);
+    padding: 6px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 2rem;
+    display: inline-flex;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+.stTabs [data-baseweb="tab"] {
+    height: 44px;
+    white-space: pre-wrap;
+    background-color: transparent;
+    border-radius: 10px;
+    color: #94a3b8;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0 20px;
+    border: none !important;
+    margin: 0 4px;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+.stTabs [aria-selected="true"] {
+    background-color: rgba(79, 70, 229, 0.2) !important;
+    color: #818cf8 !important;
+    border: 1px solid rgba(79, 70, 229, 0.3) !important;
+    box-shadow: 0 4px 15px rgba(79, 70, 229, 0.2);
+}
+
+/* Text Inputs & Selects */
+.stTextInput > div > div > input, .stSelectbox > div > div {
+    background-color: rgba(15, 23, 42, 0.6) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 12px !important;
     color: white !important;
-    border-radius: 8px !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
-    transition: all 0.2s ease-in-out !important;
+    padding: 0.75rem 1rem !important;
+    transition: all 0.3s ease !important;
+    font-family: 'Inter', sans-serif !important;
+}
+.stTextInput > div > div > input:focus, .stSelectbox > div > div:focus-within {
+    border-color: #4F46E5 !important;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2) !important;
+    background-color: rgba(30, 41, 59, 0.8) !important;
+}
+
+/* Gradient Buttons */
+.stButton > button {
+    background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%) !important;
+    color: white !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     font-weight: 600 !important;
-    padding: 0.5rem 1rem !important;
+    letter-spacing: 0.02em !important;
+    padding: 0.6rem 1.5rem !important;
 }
 .stButton > button:hover {
     transform: translateY(-2px) !important;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3) !important;
-    border-color: rgba(255,255,255,0.3) !important;
-}
-
-/* Text Inputs & Tabs */
-.stTextInput > div > div > input {
-    background-color: rgba(30, 41, 59, 0.7) !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
-    border-radius: 8px !important;
-    color: white !important;
-    transition: all 0.2s !important;
-}
-.stTextInput > div > div > input:focus {
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3) !important;
+    box-shadow: 0 8px 25px rgba(79, 70, 229, 0.5) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
 }
 
 /* Cards & Expanders */
 .streamlit-expanderHeader {
-    background-color: rgba(30, 41, 59, 0.5) !important;
-    border-radius: 8px !important;
-    border: 1px solid rgba(255,255,255,0.05) !important;
+    background-color: rgba(30, 41, 59, 0.4) !important;
+    backdrop-filter: blur(10px) !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+}
+.streamlit-expanderHeader:hover {
+    background-color: rgba(30, 41, 59, 0.6) !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+}
+[data-testid="stExpanderDetails"] {
+    border: 1px solid rgba(255, 255, 255, 0.04) !important;
+    border-top: none !important;
+    border-radius: 0 0 12px 12px !important;
+    background: rgba(15, 23, 42, 0.2) !important;
 }
 
 /* Chat Messages */
 .stChatMessage {
-    background: rgba(30, 41, 59, 0.6) !important;
-    backdrop-filter: blur(8px) !important;
-    border: 1px solid rgba(255,255,255,0.05) !important;
-    border-radius: 12px !important;
+    background: rgba(15, 23, 42, 0.5) !important;
+    backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border-radius: 16px !important;
     padding: 1.5rem !important;
-    margin-bottom: 1rem !important;
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1) !important;
+    margin-bottom: 1.25rem !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important;
+    font-size: 0.95rem !important;
+    line-height: 1.6 !important;
 }
 .stChatMessage[data-testid="stChatMessage-user"] {
-    background: rgba(59, 130, 246, 0.1) !important;
-    border: 1px solid rgba(59, 130, 246, 0.2) !important;
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.1), rgba(79, 70, 229, 0.02)) !important;
+    border: 1px solid rgba(79, 70, 229, 0.15) !important;
+    border-left: 4px solid #4F46E5 !important;
+}
+.stChatMessage[data-testid="stChatMessage-assistant"] {
+    border-left: 4px solid #10B981 !important;
+}
+
+/* Code Blocks in Chat */
+.stChatMessage pre {
+    background-color: #0D1117 !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 10px !important;
+    padding: 1rem !important;
+}
+.stChatMessage code {
+    font-family: 'Fira Code', monospace !important;
+    font-size: 0.85rem !important;
+}
+
+/* Chat Input */
+[data-testid="stChatInput"] {
+    background: rgba(15, 23, 42, 0.8) !important;
+    backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 16px !important;
+    padding: 0.5rem !important;
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.2) !important;
 }
 
 /* Badges & Metrics */
 [data-testid="stMetricValue"] {
-    font-size: 2rem !important;
+    font-size: 2.2rem !important;
     font-weight: 800 !important;
-    background: -webkit-linear-gradient(45deg, #60a5fa, #a78bfa);
+    font-family: 'Inter', sans-serif !important;
+    background: -webkit-linear-gradient(45deg, #60A5FA, #A78BFA);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #475569; }
-
-/* Glowing Headers */
-h1 {
-    font-weight: 800 !important;
     letter-spacing: -0.02em !important;
-    text-shadow: 0 0 20px rgba(59, 130, 246, 0.3) !important;
+}
+[data-testid="stMetricLabel"] {
+    font-weight: 600 !important;
+    color: #94A3B8 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    font-size: 0.8rem !important;
 }
 
 /* Alert Boxes */
 div[data-testid="stAlert"] {
-    border-radius: 10px !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
-    backdrop-filter: blur(5px) !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    backdrop-filter: blur(12px) !important;
+    background: rgba(15, 23, 42, 0.6) !important;
+    color: #E2E8F0 !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
 }
+
+/* Modern Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -398,54 +504,56 @@ st.markdown("""
 <style>
     /* Premium dark-themed operational UI backdrop */
     .stApp {
-        background: radial-gradient(circle at 50% 50%, #0e1322, #040712);
+        background: radial-gradient(circle at 10% 20%, rgba(79, 70, 229, 0.08), transparent 40%),
+                    radial-gradient(circle at 90% 80%, rgba(124, 58, 237, 0.05), transparent 40%) !important;
         color: #f1f5f9;
-        font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+        font-family: 'Inter', system-ui, sans-serif;
     }
     .reportview-container .main .block-container {
-        padding-top: 2rem;
+        padding-top: 2.5rem;
     }
     h1 {
-        font-family: 'Outfit', 'Barlow Condensed', sans-serif;
+        font-family: 'Inter', sans-serif;
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: #ffffff;
-        border-bottom: 2px solid #ff5722;
+        border-bottom: 2px solid #4F46E5;
         padding-bottom: 0.75rem;
         margin-bottom: 1.75rem;
-        text-shadow: 0 0 15px rgba(255, 87, 34, 0.2);
+        text-shadow: 0 0 15px rgba(79, 70, 229, 0.2);
     }
     
     /* Sleek Custom Tabs Styling */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: rgba(15, 23, 42, 0.35);
-        padding: 6px 10px;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
+        gap: 0px;
+        background-color: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(16px);
+        padding: 6px;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
         margin-bottom: 1.5rem;
     }
     .stTabs [data-baseweb="tab"] {
-        height: 40px;
+        height: 44px;
         white-space: pre-wrap;
         background-color: transparent;
-        border-radius: 8px;
+        border-radius: 10px;
         color: #94a3b8;
         font-weight: 600;
-        font-size: 0.85rem;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        padding: 0 16px;
+        font-size: 0.9rem;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        padding: 0 20px;
         border: none !important;
     }
     .stTabs [data-baseweb="tab"]:hover {
-        background-color: rgba(255, 255, 255, 0.03);
+        background-color: rgba(255, 255, 255, 0.05);
         color: #ffffff;
     }
     .stTabs [aria-selected="true"] {
-        background-color: rgba(99, 102, 241, 0.15) !important;
+        background-color: rgba(79, 70, 229, 0.2) !important;
         color: #818cf8 !important;
-        border: 1px solid rgba(99, 102, 241, 0.3) !important;
+        border: 1px solid rgba(79, 70, 229, 0.3) !important;
         font-weight: 700;
     }
     
@@ -485,10 +593,10 @@ st.markdown("""
 
     /* Metric Cards */
     .metric-card {
-        background: rgba(15, 23, 42, 0.5);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
         padding: 1.25rem;
         text-align: center;
@@ -537,9 +645,9 @@ st.markdown("""
         margin-bottom: 0.5rem;
     }
     .stat-val {
-        font-size: 1.6rem;
+        font-size: 1.8rem;
         font-weight: 800;
-        font-family: 'Outfit', sans-serif;
+        font-family: 'Inter', sans-serif;
         color: #ffffff;
         text-shadow: 0 0 10px rgba(255, 255, 255, 0.05);
     }
@@ -570,8 +678,8 @@ st.markdown("""
     
     /* Kubernetes Status Badges */
     .k8s-badge {
-        font-family: 'Outfit', sans-serif;
-        font-size: 0.68rem;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.75rem;
         font-weight: 700;
         text-transform: uppercase;
         padding: 3px 8px;
@@ -696,10 +804,10 @@ st.markdown("""
         background-color: #64748b;
     }
     .pipeline-container {
-        background: rgba(15, 23, 42, 0.5);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
         padding: 1.5rem;
         margin-bottom: 1.5rem;
@@ -714,7 +822,7 @@ st.markdown("""
         margin-bottom: 1.25rem;
     }
     .pipeline-title {
-        font-family: 'Outfit', sans-serif;
+        font-family: 'Inter', sans-serif;
         font-weight: 700;
         text-transform: uppercase;
         color: #ff5722;
@@ -762,9 +870,9 @@ st.markdown("""
         margin-bottom: 1.5rem;
     }
     .k8s-pod-card {
-        background: rgba(15, 23, 42, 0.55);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
         padding: 1.25rem;
@@ -831,7 +939,7 @@ st.markdown("""
         backdrop-filter: blur(10px);
     }
     .chat-welcome-title {
-        font-family: 'Outfit', sans-serif;
+        font-family: 'Inter', sans-serif;
         font-weight: 800;
         font-size: 2.2rem;
         margin-bottom: 0.5rem;
@@ -865,7 +973,7 @@ st.markdown("""
         box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
     }
     .chat-suggestion-title {
-        font-family: 'Outfit', sans-serif;
+        font-family: 'Inter', sans-serif;
         font-size: 0.95rem;
         font-weight: 700;
         color: #ffffff;
@@ -898,7 +1006,7 @@ st.markdown("""
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
     }
     .chat-role-header {
-        font-family: 'Outfit', sans-serif;
+        font-family: 'Inter', sans-serif;
         font-size: 0.78rem;
         font-weight: 700;
         text-transform: uppercase;
@@ -967,9 +1075,9 @@ st.markdown("""
     
     /* Compact Pod Directory Table Styles */
     .pod-table-container {
-        background: rgba(15, 23, 42, 0.5);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
         padding: 1.25rem;
@@ -1000,7 +1108,7 @@ st.markdown("""
         font-size: 0.8rem;
     }
     .pod-table th {
-        font-family: 'Outfit', sans-serif;
+        font-family: 'Inter', sans-serif;
         font-weight: 700;
         text-transform: uppercase;
         color: #94a3b8;
@@ -2256,6 +2364,7 @@ def show_console_tab():
     # ─────────────────────────────────────────────
     #  CI/CD Pipeline Monitor Widget
     # ─────────────────────────────────────────────
+    st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("### <i class='fa-solid fa-arrows-spin' style='color:#6366f1; margin-right:8px;'></i> CI/CD DevSecOps Pipeline Monitor", unsafe_allow_html=True)
     
     with st.spinner("Fetching latest pipeline status from GitHub..."):
@@ -2345,19 +2454,19 @@ def show_console_tab():
             
             failed_list_html = "".join(failed_jobs_details)
             diagnostic_html = f"""<div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 10px; padding: 1.25rem; height: 100%;">
-<h4 style="margin: 0 0 10px 0; color: #ef4444; font-size: 1rem; text-transform: uppercase; font-family: 'Barlow Condensed', sans-serif;"><i class='fa-solid fa-circle-xmark'></i> Pipeline Outage Diagnostics</h4>
+<h4 style="margin: 0 0 10px 0; color: #ef4444; font-size: 1rem; text-transform: uppercase; font-family: 'Inter', sans-serif;"><i class='fa-solid fa-circle-xmark'></i> Pipeline Outage Diagnostics</h4>
 <div style="max-height: 250px; overflow-y: auto;">
 {failed_list_html}
 </div>
 </div>"""
         elif status == "in_progress":
             diagnostic_html = f"""<div style="background: rgba(255, 179, 0, 0.05); border: 1px solid rgba(255, 179, 0, 0.2); border-radius: 10px; padding: 1.25rem; height: 100%;">
-<h4 style="margin: 0 0 10px 0; color: #ffb300; font-size: 1rem; text-transform: uppercase; font-family: 'Barlow Condensed', sans-serif;"><i class='fa-solid fa-arrows-spin fa-spin'></i> Active Build running</h4>
+<h4 style="margin: 0 0 10px 0; color: #ffb300; font-size: 1rem; text-transform: uppercase; font-family: 'Inter', sans-serif;"><i class='fa-solid fa-arrows-spin fa-spin'></i> Active Build running</h4>
 <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">GitHub Actions is actively compiling code and executing security gates. Use the Refresh button above to poll live status.</p>
 </div>"""
         else:
             diagnostic_html = f"""<div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 10px; padding: 1.25rem; height: 100%;">
-<h4 style="margin: 0 0 10px 0; color: #10b981; font-size: 1rem; text-transform: uppercase; font-family: 'Barlow Condensed', sans-serif;"><i class='fa-solid fa-circle-check'></i> Pipeline Healthy</h4>
+<h4 style="margin: 0 0 10px 0; color: #10b981; font-size: 1rem; text-transform: uppercase; font-family: 'Inter', sans-serif;"><i class='fa-solid fa-circle-check'></i> Pipeline Healthy</h4>
 <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">All DevSecOps verification checks and Kubeconform linter tests have passed successfully. System integrity is verified.</p>
 </div>"""
     
@@ -2380,6 +2489,7 @@ def show_console_tab():
     # ─────────────────────────────────────────────
     #  Proactive Incident Alerts
     # ─────────────────────────────────────────────
+    st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("### <i class='fa-solid fa-bell-exclamation' style='color:#ef4444; margin-right:8px;'></i> Proactive AIOps Incident Alerts", unsafe_allow_html=True)
     
     incidents = []
