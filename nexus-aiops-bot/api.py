@@ -12,7 +12,8 @@ import uuid
 import boto3
 from boto3.dynamodb.conditions import Key
 
-from database import init_dynamodb, get_users_table, get_keys_table
+from database import init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table
+import notifications
 
 # Initialize tables if they don't exist
 try:
@@ -181,6 +182,127 @@ async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(verif
             answer=result.get("answer", ""),
             citations=result.get("citations", [])
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Telemetry Ingress ---
+class NexusEvent(BaseModel):
+    service: str
+    level: str
+    message: str
+    latency_ms: Optional[float] = None
+    status_code: Optional[int] = None
+    request_id: Optional[str] = None
+
+@app.post("/api/v1/ingest")
+def ingest_telemetry(event: NexusEvent, current_user: dict = Depends(verify_api_key)):
+    try:
+        tenant_id = current_user.get("user_id") # Map API key to tenant/user
+        logs_table = get_logs_table()
+        timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+        
+        logs_table.put_item(Item={
+            'tenant_id': tenant_id,
+            'timestamp': timestamp,
+            'service': event.service,
+            'level': event.level,
+            'message': event.message,
+            'latency_ms': str(event.latency_ms) if event.latency_ms else None,
+            'status_code': event.status_code,
+            'request_id': event.request_id
+        })
+        
+        # Super simple mock incident trigger for "ERROR" severity
+        if event.level.upper() in ["ERROR", "CRITICAL", "FATAL"]:
+            incident_id = f"INC-{uuid.uuid4().hex[:8].upper()}"
+            incidents_table = get_incidents_table()
+            incidents_table.put_item(Item={
+                'tenant_id': tenant_id,
+                'incident_id': incident_id,
+                'status': 'OPEN',
+                'severity': event.level.upper(),
+                'service': event.service,
+                'created_at': timestamp,
+                'rca_report': ''
+            })
+            # Dispatch email using the Notification Framework
+            notifications.notify_incident_created(
+                tenant_email=current_user.get("email"),
+                incident_id=incident_id,
+                service=event.service,
+                severity=event.level.upper()
+            )
+            
+        return {"status": "success", "message": "Log ingested"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ingest Error: {str(e)}")
+
+@app.get("/api/v1/logs")
+def get_logs(current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_id = current_user.get("user_id")
+        logs_table = get_logs_table()
+        
+        response = logs_table.query(
+            KeyConditionExpression=Key('tenant_id').eq(tenant_id),
+            ScanIndexForward=False, # Get newest first
+            Limit=50
+        )
+        return response.get('Items', [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Incident Management ---
+@app.get("/api/v1/incidents")
+def get_incidents(current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_id = current_user.get("user_id")
+        incidents_table = get_incidents_table()
+        
+        response = incidents_table.query(
+            KeyConditionExpression=Key('tenant_id').eq(tenant_id)
+        )
+        return response.get('Items', [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/incidents/{incident_id}/rca")
+def generate_incident_rca(incident_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_id = current_user.get("user_id")
+        incidents_table = get_incidents_table()
+        
+        # Verify incident belongs to tenant
+        response = incidents_table.get_item(Key={'tenant_id': tenant_id, 'incident_id': incident_id})
+        if 'Item' not in response:
+            raise HTTPException(status_code=404, detail="Incident not found")
+            
+        incident = response['Item']
+        
+        # Trigger actual RCA generation (using the RAG engine)
+        rca_query = f"Generate a Root Cause Analysis for incident {incident_id} affecting {incident.get('service')}. Look for recent errors in the logs."
+        rca_result = engine.run_query(rca_query, time_window_mins=60)
+        rca_report = rca_result.get("answer", "No RCA could be generated.")
+        
+        # Update Database
+        incidents_table.update_item(
+            Key={'tenant_id': tenant_id, 'incident_id': incident_id},
+            UpdateExpression="SET rca_report = :rca, #st = :st",
+            ExpressionAttributeNames={"#st": "status"},
+            ExpressionAttributeValues={":rca": rca_report, ":st": "ANALYZED"}
+        )
+        
+        # Send RCA Email
+        notifications.notify_rca_completed(
+            tenant_email=current_user.get("email"),
+            incident_id=incident_id,
+            service=incident.get("service"),
+            rca_report=rca_report
+        )
+        
+        return {"status": "success", "incident_id": incident_id, "rca_report": rca_report}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

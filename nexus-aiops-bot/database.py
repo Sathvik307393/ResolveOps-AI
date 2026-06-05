@@ -60,9 +60,55 @@ def init_dynamodb():
         table.wait_until_exists()
         print("NexusApiKeys table created successfully!")
 
+    if "NexusIncidents" not in existing_tables:
+        print("Creating NexusIncidents DynamoDB table...")
+        table = dynamodb.create_table(
+            TableName='NexusIncidents',
+            KeySchema=[
+                {'AttributeName': 'tenant_id', 'KeyType': 'HASH'},  # Partition key
+                {'AttributeName': 'incident_id', 'KeyType': 'RANGE'} # Sort key
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'tenant_id', 'AttributeType': 'S'},
+                {'AttributeName': 'incident_id', 'AttributeType': 'S'}
+            ],
+            ProvisionedThroughput={
+                'ReadCapacityUnits': 5,
+                'WriteCapacityUnits': 5
+            }
+        )
+        table.wait_until_exists()
+        print("NexusIncidents table created successfully!")
+
+    if "NexusLogs" not in existing_tables:
+        print("Creating NexusLogs DynamoDB table...")
+        table = dynamodb.create_table(
+            TableName='NexusLogs',
+            KeySchema=[
+                {'AttributeName': 'tenant_id', 'KeyType': 'HASH'},  # Partition key
+                {'AttributeName': 'timestamp', 'KeyType': 'RANGE'}  # Sort key
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'tenant_id', 'AttributeType': 'S'},
+                {'AttributeName': 'timestamp', 'AttributeType': 'S'}
+            ],
+            ProvisionedThroughput={
+                'ReadCapacityUnits': 5,
+                'WriteCapacityUnits': 5
+            }
+        )
+        table.wait_until_exists()
+        print("NexusLogs table created successfully!")
+
 def get_users_table():
     return dynamodb.Table('NexusUsers')
 
 def get_keys_table():
     return dynamodb.Table('NexusApiKeys')
+
+def get_incidents_table():
+    return dynamodb.Table('NexusIncidents')
+
+def get_logs_table():
+    return dynamodb.Table('NexusLogs')
 

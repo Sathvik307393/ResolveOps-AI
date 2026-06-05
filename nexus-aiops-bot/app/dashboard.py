@@ -35,6 +35,13 @@ except Exception as e:
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 
+api_base_url = os.environ.get("API_URL", "http://nexus-api:8000")
+try:
+    import requests
+    requests.get(api_base_url, timeout=0.5)
+except:
+    api_base_url = "http://localhost:8000"
+
 # Streamlit App Styling
 st.set_page_config(
     page_title="Nexus AIOps SRE RAG Dashboard",
@@ -2223,10 +2230,18 @@ anomaly_mapping = {
 }
 
 def inject_anomaly_into_services(scenario):
-    # Generate logs for local logs buffer to simulate telemetry
     new_logs = generate_mock_logs(scenario)
-    append_local_logs(new_logs)
     
+    # Push to new Multi-Tenant Ingest API
+    if st.session_state.get("jwt_token"):
+        headers = {"Authorization": f"Bearer {st.session_state.jwt_token}"}
+        for log in new_logs:
+            try:
+                requests.post(f"{api_base_url}/api/v1/ingest", json=log, headers=headers)
+            except Exception as e:
+                st.sidebar.error(f"Ingest Failed: {e}")
+                break
+
     if scenario != "healthy":
         st.sidebar.success(f"Anomaly '{scenario}' successfully injected into simulation environment!")
 
@@ -2253,12 +2268,7 @@ if st.sidebar.button("Reset In-Memory Databases & Logs"):
 if "jwt_token" not in st.session_state:
     st.session_state.jwt_token = None
 
-api_base_url = os.environ.get("API_URL", "http://nexus-api:8000")
-# Fallback for local dev
-try:
-    requests.get(api_base_url, timeout=0.5)
-except:
-    api_base_url = "http://localhost:8000"
+
 
 if not st.session_state.jwt_token:
     st.markdown("<div style='text-align: center; margin-top: 50px;'><i class='fa-solid fa-microchip' style='font-size: 4rem; color: #6366f1;'></i><h1 style='color: #e2e8f0;'>Nexus SRE SaaS Platform</h1><p style='color: #94a3b8;'>Please login or register to access your workspace.</p></div>", unsafe_allow_html=True)
@@ -2493,16 +2503,23 @@ def show_console_tab():
     st.markdown("### <i class='fa-solid fa-bell-exclamation' style='color:#ef4444; margin-right:8px;'></i> Proactive AIOps Incident Alerts", unsafe_allow_html=True)
     
     incidents = []
-    local_inc = load_local_incidents()
-    for e in local_inc:
-        incidents.append({
-            "timestamp": e.get("timestamp"),
-            "service": e.get("service"),
-            "severity": e.get("severity"),
-            "message": e.get("message"),
-            "answer": e.get("answer"),
-            "citations": json.loads(e.get("citations")) if isinstance(e.get("citations"), str) else e.get("citations", [])
-        })
+    try:
+        headers = {"Authorization": f"Bearer {st.session_state.jwt_token}"}
+        res = requests.get(f"{api_base_url}/api/v1/incidents", headers=headers)
+        if res.status_code == 200:
+            local_inc = res.json()
+            for e in local_inc:
+                incidents.append({
+                    "incident_id": e.get("incident_id"),
+                    "timestamp": e.get("created_at"),
+                    "service": e.get("service"),
+                    "severity": e.get("severity"),
+                    "message": "Incident detected via telemetry logs.",
+                    "answer": e.get("rca_report") or "RCA Generation Pending...",
+                    "status": e.get("status")
+                })
+    except Exception as e:
+        st.error(f"Failed to fetch active incidents from API: {e}")
     
     def sort_key(inc):
         sev_val = 0 if inc["severity"] == "CRITICAL" else 1
@@ -2530,12 +2547,20 @@ def show_console_tab():
     #  Ingested Live Log Stream
     # ─────────────────────────────────────────────
     st.markdown("### <i class='fa-solid fa-list-ul' style='color:#10b981; margin-right:8px;'></i> Ingested Live Log Stream", unsafe_allow_html=True)
-    all_logs = load_local_logs()
+    all_logs = []
+    try:
+        headers = {"Authorization": f"Bearer {st.session_state.jwt_token}"}
+        res = requests.get(f"{api_base_url}/api/v1/logs", headers=headers)
+        if res.status_code == 200:
+            all_logs = res.json()
+    except Exception as e:
+        st.error(f"Failed to fetch live logs: {e}")
+        
     log_html = ""
     if all_logs:
-        for log in reversed(all_logs[-20:]):
+        for log in all_logs[:20]: # Show latest 20
             color = "#10b981"
-            if log["level"] == "ERROR":
+            if log["level"] == "ERROR" or log["level"] == "CRITICAL":
                 color = "#ef4444"
             elif log["level"] == "WARNING":
                 color = "#ffb300"
