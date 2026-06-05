@@ -1,112 +1,149 @@
 import boto3
 import os
 import json
+import smtplib
 import logging
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 logger = logging.getLogger(__name__)
 
-class NotificationDispatcher:
-    """Base class for all outbound notifications."""
-    def send(self, recipient: str, subject: str, message: str) -> bool:
-        raise NotImplementedError
+DASHBOARD_URL = "https://nexusai.sathvikdevops.online"
 
-class EmailDispatcher(NotificationDispatcher):
-    """
-    Dispatches notifications exclusively via Email (AWS SES).
-    If SES is not configured, it falls back to local logging.
-    """
-    def __init__(self):
-        self.region = os.getenv("AWS_REGION", "us-east-1")
-        self.sender_email = os.getenv("NEXUS_SENDER_EMAIL", "nexus-alerts@example.com")
-        self.ses_client = None
-        self.mock_mode = False
-        
+# ─── SMTP Configuration ──────────────────────────────────────────────────────
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SENDER_EMAIL = os.getenv("NEXUS_SENDER_EMAIL", SMTP_USER)
+
+def _send_smtp(recipient: str, subject: str, html_body: str) -> bool:
+    """Send an email via SMTP (Gmail / any SMTP provider)."""
+    if not SMTP_USER or not SMTP_PASSWORD:
+        logger.warning(f"SMTP not configured. MOCK EMAIL to {recipient}: {subject}")
+        # Write to a local mock file as fallback
         try:
-            # Check if credentials exist
-            if os.getenv("AWS_ACCESS_KEY_ID"):
-                self.ses_client = boto3.client('ses', region_name=self.region)
-                # Attempt to get identity verification status
-                # If it fails, we fall back to mock mode safely
-                self.ses_client.get_send_quota()
-            else:
-                self.mock_mode = True
-        except Exception as e:
-            logger.warning(f"SES initialization failed, falling back to local mock mode: {e}")
-            self.mock_mode = True
-
-    def send(self, recipient: str, subject: str, message: str) -> bool:
-        if self.mock_mode:
-            # Fallback for local development or unverified SES accounts
-            mock_payload = {
-                "recipient": recipient,
-                "subject": subject,
-                "message": message
-            }
-            logger.info(f"MOCK EMAIL DISPATCHED to {recipient}: {subject}")
-            
             with open("local_emails_mock.json", "a") as f:
-                f.write(json.dumps(mock_payload) + "\n")
-            return True
+                f.write(json.dumps({"to": recipient, "subject": subject}) + "\n")
+        except Exception:
+            pass
+        return True
 
-        # Send via AWS SES
-        try:
-            response = self.ses_client.send_email(
-                Source=self.sender_email,
-                Destination={
-                    'ToAddresses': [recipient]
-                },
-                Message={
-                    'Subject': {
-                        'Data': subject,
-                        'Charset': 'UTF-8'
-                    },
-                    'Body': {
-                        'Html': {
-                            'Data': message,
-                            'Charset': 'UTF-8'
-                        }
-                    }
-                }
-            )
-            logger.info(f"SES Email sent! Message ID: {response['MessageId']}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send SES email: {e}")
-            # Fallback to local
-            with open("local_emails_mock.json", "a") as f:
-                f.write(json.dumps({"recipient": recipient, "subject": subject, "error": str(e)}) + "\n")
-            return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"Nexus AI <{SENDER_EMAIL}>"
+        msg["To"] = recipient
+        msg.attach(MIMEText(html_body, "html"))
 
-# Global Dispatcher Instance
-email_dispatcher = EmailDispatcher()
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SENDER_EMAIL, [recipient], msg.as_string())
 
-def notify_incident_created(tenant_email: str, incident_id: str, service: str, severity: str):
-    """Sends an email when a new incident is detected."""
-    subject = f"[{severity}] Nexus AI Alert: Incident {incident_id} on {service}"
-    html_body = f"""
-    <h2>Nexus AI Incident Alert</h2>
-    <p>A new infrastructure anomaly has been detected and registered.</p>
-    <ul>
-        <li><strong>Incident ID:</strong> {incident_id}</li>
-        <li><strong>Affected Service:</strong> {service}</li>
-        <li><strong>Severity:</strong> {severity}</li>
-    </ul>
-    <p>The AI RCA engine is currently analyzing the logs. You will receive the full report shortly.</p>
+        logger.info(f"SMTP email sent to {recipient}: {subject}")
+        return True
+    except Exception as e:
+        logger.error(f"SMTP send failed: {e}")
+        return False
+
+
+def _html_wrapper(title: str, body_html: str) -> str:
+    """Wraps content in a premium, on-brand Nexus AI email template."""
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 0; }}
+        .container {{ max-width: 600px; margin: 40px auto; background: #1e293b; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); }}
+        .header {{ background: linear-gradient(135deg, #4f46e5, #6366f1); padding: 32px; text-align: center; }}
+        .header h1 {{ margin: 0; font-size: 24px; color: #ffffff; letter-spacing: -0.5px; }}
+        .header p {{ margin: 4px 0 0; font-size: 13px; color: rgba(255,255,255,0.7); }}
+        .body {{ padding: 32px; }}
+        .body h2 {{ color: #f1f5f9; font-size: 20px; margin-top: 0; }}
+        .body p {{ color: #94a3b8; line-height: 1.6; }}
+        .card {{ background: #0f172a; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 20px; margin: 20px 0; }}
+        .badge-critical {{ display: inline-block; background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3); border-radius: 4px; padding: 3px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }}
+        .badge-warning {{ display: inline-block; background: rgba(245,158,11,0.2); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); border-radius: 4px; padding: 3px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }}
+        .otp-box {{ background: #0f172a; border: 2px solid #4f46e5; border-radius: 12px; padding: 24px; text-align: center; margin: 24px 0; }}
+        .otp-code {{ font-size: 40px; font-weight: 800; letter-spacing: 12px; color: #a5b4fc; font-family: monospace; }}
+        .btn {{ display: inline-block; background: linear-gradient(135deg, #4f46e5, #6366f1); color: #ffffff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 14px; margin-top: 16px; }}
+        .footer {{ background: #0f172a; padding: 20px 32px; text-align: center; border-top: 1px solid rgba(255,255,255,0.05); }}
+        .footer p {{ color: #475569; font-size: 12px; margin: 0; }}
+        pre {{ background: #020617; color: #94a3b8; padding: 16px; border-radius: 8px; font-size: 13px; overflow-x: auto; border-left: 3px solid #4f46e5; white-space: pre-wrap; }}
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>⬡ Nexus AI</h1>
+          <p>Autonomous SRE & Incident Intelligence Platform</p>
+        </div>
+        <div class="body">
+          <h2>{title}</h2>
+          {body_html}
+        </div>
+        <div class="footer">
+          <p>Nexus AI · <a href="{DASHBOARD_URL}" style="color:#6366f1;">nexusai.sathvikdevops.online</a> · This is an automated notification.</p>
+        </div>
+      </div>
+    </body>
+    </html>
     """
-    return email_dispatcher.send(tenant_email, subject, html_body)
 
-def notify_rca_completed(tenant_email: str, incident_id: str, service: str, rca_report: str):
-    """Sends an email containing the full RCA report."""
-    subject = f"Nexus AI RCA Report: Incident {incident_id} ({service})"
-    # Convert markdown to simple HTML line breaks for the email
+
+# ─── Public Notification Functions ───────────────────────────────────────────
+
+def send_otp_email(email: str, full_name: str, otp_code: str) -> bool:
+    """Sends a 6-digit OTP verification code to the user's email."""
+    first_name = full_name.split()[0] if full_name else "there"
+    body = f"""
+        <p>Hi <strong>{first_name}</strong>,</p>
+        <p>Welcome to <strong>Nexus AI</strong>! To verify your email address and activate your account, please enter the OTP below:</p>
+        <div class="otp-box">
+          <div class="otp-code">{otp_code}</div>
+          <p style="color:#64748b; font-size:13px; margin-top:12px;">This code expires in <strong>10 minutes</strong>.</p>
+        </div>
+        <p style="color:#64748b; font-size:13px;">If you did not request this, please ignore this email.</p>
+    """
+    return _send_smtp(email, "Your Nexus AI Verification Code", _html_wrapper("Email Verification", body))
+
+
+def notify_incident_created(tenant_email: str, incident_id: str, service: str, severity: str, full_name: str = "") -> bool:
+    """Sends a real-time incident alert email the moment an error is detected."""
+    first_name = full_name.split()[0] if full_name else "Engineer"
+    badge_class = "badge-critical" if severity in ("CRITICAL", "FATAL", "ERROR") else "badge-warning"
+    body = f"""
+        <p>Hi <strong>{first_name}</strong>,</p>
+        <p>A new infrastructure anomaly has been detected and automatically registered as an incident in your Nexus AI dashboard.</p>
+        <div class="card">
+          <table style="width:100%; border-collapse:collapse;">
+            <tr><td style="color:#64748b; padding: 6px 0; font-size:13px;">Incident ID</td><td style="color:#f1f5f9; font-weight:600; font-size:13px;">{incident_id}</td></tr>
+            <tr><td style="color:#64748b; padding: 6px 0; font-size:13px;">Affected Service</td><td style="color:#f1f5f9; font-weight:600; font-size:13px;">{service}</td></tr>
+            <tr><td style="color:#64748b; padding: 6px 0; font-size:13px;">Severity</td><td><span class="{badge_class}">{severity}</span></td></tr>
+          </table>
+        </div>
+        <p>The Nexus AI RAG engine is now analyzing your logs to generate a Root Cause Analysis. You will receive the full report in a follow-up email.</p>
+        <a href="{DASHBOARD_URL}" class="btn">View Incident Dashboard →</a>
+    """
+    subject = f"[{severity}] Nexus AI Alert: {incident_id} on {service}"
+    return _send_smtp(tenant_email, subject, _html_wrapper(f"New {severity} Incident Detected", body))
+
+
+def notify_rca_completed(tenant_email: str, incident_id: str, service: str, rca_report: str, full_name: str = "") -> bool:
+    """Sends the full AI-generated RCA report to the user's inbox."""
+    first_name = full_name.split()[0] if full_name else "Engineer"
     formatted_rca = rca_report.replace("\n", "<br>")
-    
-    html_body = f"""
-    <h2>Nexus AI Root Cause Analysis</h2>
-    <p>The RCA for Incident <strong>{incident_id}</strong> on <strong>{service}</strong> is complete.</p>
-    <div style="background-color: #f8fafc; padding: 15px; border-left: 4px solid #4F46E5; font-family: monospace;">
-        {formatted_rca}
-    </div>
-    <p><a href="http://localhost:8501">View Details in Nexus Dashboard</a></p>
+    body = f"""
+        <p>Hi <strong>{first_name}</strong>,</p>
+        <p>The Nexus AI RCA engine has completed its analysis for incident <strong>{incident_id}</strong> on <strong>{service}</strong>.</p>
+        <div class="card">
+          <pre>{formatted_rca}</pre>
+        </div>
+        <a href="{DASHBOARD_URL}" class="btn">View Full Report →</a>
     """
-    return email_dispatcher.send(tenant_email, subject, html_body)
+    subject = f"Nexus AI RCA Complete: {incident_id} ({service})"
+    return _send_smtp(tenant_email, subject, _html_wrapper("Root Cause Analysis Ready", body))

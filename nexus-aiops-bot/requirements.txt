@@ -5,13 +5,9 @@ pyjwt>=2.8.0
 passlib>=1.7.4
 bcrypt>=4.1.3
 python-dotenv>=1.0.1
-streamlit>=1.35.0
 langchain>=0.2.1
 langchain-aws
-# AWS & AI Database Integrations
+langchain-community
 boto3
 faiss-cpu
-langchain-community
 pydantic>=2.7.2
-pandas>=2.2.2
-plotly>=5.22.0

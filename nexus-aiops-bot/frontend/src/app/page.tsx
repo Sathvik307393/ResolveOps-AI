@@ -3,8 +3,25 @@
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { fetchApi } from "@/lib/api";
-import { Activity, Settings, MoreHorizontal } from "lucide-react";
+import { Activity, Settings, MoreHorizontal, Sun, Sunset, Moon } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function getGreeting(): { text: string; Icon: typeof Sun } {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return { text: "Good Morning", Icon: Sun };
+  if (hour >= 12 && hour < 18) return { text: "Good Afternoon", Icon: Sunset };
+  return { text: "Good Evening", Icon: Moon };
+}
+
+function decodeJwtPayload(token: string): Record<string, any> {
+  try {
+    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(base64));
+  } catch {
+    return {};
+  }
+}
 
 // Helper to generate sparkline SVG path based on error densities
 function generateSparklinePath(logs: any[], width = 100, height = 40) {
@@ -38,7 +55,7 @@ function generateSparklinePath(logs: any[], width = 100, height = 40) {
 export default function AICommandCenter() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  
+  const [fullName, setFullName] = useState("");
   const [incidents, setIncidents] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
 
@@ -49,6 +66,10 @@ export default function AICommandCenter() {
       return;
     }
 
+    // Decode username from JWT payload (client-side, no secret needed)
+    const payload = decodeJwtPayload(token);
+    setFullName(payload.full_name || payload.email || "");
+
     // Fetch live data
     Promise.all([
       fetchApi("/api/v1/incidents").catch(() => []),
@@ -58,8 +79,10 @@ export default function AICommandCenter() {
       setLogs(Array.isArray(logsData) ? logsData : []);
       setLoading(false);
     });
-
   }, [router]);
+
+  const { text: greetingText, Icon: GreetingIcon } = getGreeting();
+  const firstName = fullName.split(" ")[0];
 
   // Derived Metrics
   const activeIncidents = useMemo(() => incidents.filter(i => i.status !== "RESOLVED"), [incidents]);
@@ -85,6 +108,15 @@ export default function AICommandCenter() {
 
   return (
     <DashboardLayout>
+        {/* Greeting Header */}
+        <div className="flex items-center space-x-3 mb-2">
+          <GreetingIcon size={22} className="text-amber-400" />
+          <h1 className="text-2xl font-bold text-white">
+            {greetingText}{firstName ? `, ${firstName}` : ""}
+          </h1>
+        </div>
+        <p className="text-sm text-slate-500 mb-4">Here&apos;s what&apos;s happening across your infrastructure right now.</p>
+
         {/* Top Header & Stats Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           

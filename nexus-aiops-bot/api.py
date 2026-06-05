@@ -7,6 +7,8 @@ from typing import Optional, List
 import jwt
 import datetime
 import hashlib
+import random
+import time
 from passlib.context import CryptContext
 import uuid
 import boto3
@@ -44,6 +46,15 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 class UserAuth(BaseModel):
     email: str
     password: str
+    full_name: Optional[str] = None
+    otp_code: Optional[str] = None
+
+class OTPRequest(BaseModel):
+    email: str
+    full_name: str
+
+# In-memory OTP store: {email: {"otp": "123456", "full_name": "John", "expires": timestamp}}
+otp_store: dict = {}
 
 class ChatRequest(BaseModel):
     query: str
@@ -57,10 +68,52 @@ class ApiKeyResponse(BaseModel):
     key: str
     name: str
 
+# --- OTP Endpoint ---
+@app.post("/api/request-otp")
+def request_otp(req: OTPRequest):
+    """Generate and email a 6-digit OTP for email verification."""
+    # Check if email already registered
+    users_table = get_users_table()
+    existing = users_table.get_item(Key={'email': req.email})
+    if 'Item' in existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    otp_code = str(random.randint(100000, 999999))
+    otp_store[req.email] = {
+        "otp": otp_code,
+        "full_name": req.full_name,
+        "expires": time.time() + 600  # 10-minute TTL
+    }
+
+    # Send OTP email
+    notifications.send_otp_email(
+        email=req.email,
+        full_name=req.full_name,
+        otp_code=otp_code
+    )
+    return {"message": f"OTP sent to {req.email}. Please check your inbox."}
+
 # --- Auth Endpoints (DynamoDB) ---
 @app.post("/api/register")
 def register_user(user: UserAuth):
     try:
+        # Validate OTP first
+        if not user.otp_code:
+            raise HTTPException(status_code=400, detail="OTP code is required")
+
+        stored = otp_store.get(user.email)
+        if not stored:
+            raise HTTPException(status_code=400, detail="No OTP found for this email. Please request one first.")
+        if time.time() > stored["expires"]:
+            del otp_store[user.email]
+            raise HTTPException(status_code=400, detail="OTP expired. Please request a new one.")
+        if stored["otp"] != user.otp_code:
+            raise HTTPException(status_code=400, detail="Invalid OTP code.")
+
+        full_name = user.full_name or stored.get("full_name", "")
+        # Clear OTP after successful validation
+        del otp_store[user.email]
+
         users_table = get_users_table()
         
         # Check if user exists
@@ -70,11 +123,12 @@ def register_user(user: UserAuth):
         
         hashed_password = get_password_hash(user.password)
         user_id = str(uuid.uuid4())
-        
-        # Save user
+
+        # Save user with full_name
         users_table.put_item(Item={
             'email': user.email,
             'user_id': user_id,
+            'full_name': full_name,
             'hashed_password': hashed_password,
             'created_at': datetime.datetime.utcnow().isoformat()
         })
@@ -113,6 +167,7 @@ def login_user(user: UserAuth):
         token = jwt.encode({
             "user_id": db_user['user_id'],
             "email": db_user['email'],
+            "full_name": db_user.get('full_name', ''),
             "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=24)
         }, JWT_SECRET, algorithm="HS256")
         
