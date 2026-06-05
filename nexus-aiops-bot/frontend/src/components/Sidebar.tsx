@@ -31,7 +31,7 @@ export default function Sidebar() {
           <Cpu size={32} />
         </div>
         <div>
-          <h1 className="font-bold text-lg tracking-tight leading-none text-white">AI ICC</h1>
+          <h1 className="font-bold text-lg tracking-tight leading-none text-white">Nexus AI</h1>
           <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">Incident Command Center</p>
         </div>
       </div>

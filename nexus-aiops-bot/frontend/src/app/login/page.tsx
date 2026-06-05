@@ -65,7 +65,7 @@ export default function LoginPage() {
           <div className="mx-auto bg-primary/20 w-16 h-16 rounded-full flex items-center justify-center mb-4">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M11 9h4a2 2 0 0 0 2-2V3"/><circle cx="9" cy="9" r="2"/><path d="M7 21v-4a2 2 0 0 1 2-2h4"/><circle cx="15" cy="15" r="2"/></svg>
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">NEXUS SRE SAAS</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">Nexus AI</CardTitle>
           <CardDescription>
             Enterprise Incident Command Center
           </CardDescription>
