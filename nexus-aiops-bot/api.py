@@ -174,7 +174,7 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
     return response['Item']
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(verify_api_key)):
+async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     try:
         # result = engine.run_query(request.query, request.time_window_mins, current_user['user_id'])
         result = engine.run_query(request.query, request.time_window_mins)
@@ -195,7 +195,7 @@ class NexusEvent(BaseModel):
     request_id: Optional[str] = None
 
 @app.post("/api/v1/ingest")
-def ingest_telemetry(event: NexusEvent, current_user: dict = Depends(verify_api_key)):
+def ingest_telemetry(event: NexusEvent, current_user: dict = Depends(get_current_user)):
     try:
         tenant_id = current_user.get("user_id") # Map API key to tenant/user
         logs_table = get_logs_table()
