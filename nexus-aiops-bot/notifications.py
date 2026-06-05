@@ -105,7 +105,7 @@ def send_otp_email(email: str, full_name: str, otp_code: str) -> bool:
         <p>Welcome to <strong>Nexus AI</strong>! To verify your email address and activate your account, please enter the OTP below:</p>
         <div class="otp-box">
           <div class="otp-code">{otp_code}</div>
-          <p style="color:#64748b; font-size:13px; margin-top:12px;">This code expires in <strong>10 minutes</strong>.</p>
+          <p style="color:#64748b; font-size:13px; margin-top:12px;">This code expires in <strong>2 minutes</strong>.</p>
         </div>
         <p style="color:#64748b; font-size:13px;">If you did not request this, please ignore this email.</p>
     """

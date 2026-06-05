@@ -82,7 +82,7 @@ def request_otp(req: OTPRequest):
     otp_store[req.email] = {
         "otp": otp_code,
         "full_name": req.full_name,
-        "expires": time.time() + 600  # 10-minute TTL
+        "expires": time.time() + 120  # 2-minute TTL
     }
 
     # Send OTP email
