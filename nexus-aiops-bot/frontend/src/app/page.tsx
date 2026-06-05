@@ -3,17 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchApi } from "@/lib/api";
-import { 
-  Activity, 
-  BarChart3, 
-  Cpu, 
-  LayoutDashboard, 
-  LogOut, 
-  MoreHorizontal, 
-  Settings, 
-  ShieldAlert, 
-  Users 
-} from "lucide-react";
+import { Activity, Settings, MoreHorizontal } from "lucide-react";
+import DashboardLayout from "@/components/DashboardLayout";
 
 export default function AICommandCenter() {
   const router = useRouter();
@@ -55,64 +46,7 @@ export default function AICommandCenter() {
   }
 
   return (
-    <div className="flex min-h-screen text-slate-200">
-      
-      {/* LEFT SIDEBAR */}
-      <aside className="w-64 border-r border-slate-800/50 glass-panel flex flex-col z-10 m-4 rounded-xl overflow-hidden">
-        {/* Logo Area */}
-        <div className="p-6 flex items-center space-x-3 mb-4">
-          <div className="text-indigo-500">
-            <Cpu size={32} />
-          </div>
-          <div>
-            <h1 className="font-bold text-lg tracking-tight leading-none text-white">AI ICC</h1>
-            <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">Incident Command Center</p>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 px-4 space-y-2">
-          <button className="w-full flex items-center space-x-3 px-4 py-3 bg-indigo-600/20 text-indigo-300 rounded-lg border border-indigo-500/30 glow-primary transition-all">
-            <LayoutDashboard size={18} />
-            <span className="font-medium text-sm">Dashboard</span>
-          </button>
-          
-          <button className="w-full flex items-center space-x-3 px-4 py-3 text-slate-400 hover:text-slate-200 hover:bg-white/5 rounded-lg transition-all">
-            <ShieldAlert size={18} />
-            <span className="font-medium text-sm">Incidents</span>
-          </button>
-          
-          <button className="w-full flex items-center space-x-3 px-4 py-3 text-slate-400 hover:text-slate-200 hover:bg-white/5 rounded-lg transition-all">
-            <BarChart3 size={18} />
-            <span className="font-medium text-sm">Analytics</span>
-          </button>
-          
-          <button className="w-full flex items-center space-x-3 px-4 py-3 text-slate-400 hover:text-slate-200 hover:bg-white/5 rounded-lg transition-all">
-            <Users size={18} />
-            <span className="font-medium text-sm">Team</span>
-          </button>
-          
-          <button className="w-full flex items-center space-x-3 px-4 py-3 text-slate-400 hover:text-slate-200 hover:bg-white/5 rounded-lg transition-all">
-            <Settings size={18} />
-            <span className="font-medium text-sm">Settings</span>
-          </button>
-        </nav>
-
-        {/* Bottom Profile / Logout */}
-        <div className="p-4 mt-auto">
-          <button 
-            onClick={() => { localStorage.removeItem("jwt_token"); router.push("/login"); }}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
-          >
-            <LogOut size={18} />
-            <span className="font-medium text-sm">Logout</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* MAIN DASHBOARD CONTENT */}
-      <main className="flex-1 p-6 flex flex-col space-y-6 overflow-y-auto">
-        
+    <DashboardLayout>
         {/* Top Header & Stats Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
@@ -264,8 +198,6 @@ export default function AICommandCenter() {
           </div>
 
         </div>
-
-      </main>
-    </div>
+    </DashboardLayout>
   );
 }
