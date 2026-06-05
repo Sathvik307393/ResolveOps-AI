@@ -58,7 +58,7 @@ class ApiKeyResponse(BaseModel):
     name: str
 
 # --- Auth Endpoints (DynamoDB) ---
-@app.post("/register")
+@app.post("/api/register")
 def register_user(user: UserAuth):
     try:
         users_table = get_users_table()
@@ -97,7 +97,7 @@ def register_user(user: UserAuth):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database Error: {str(e)}")
 
-@app.post("/login")
+@app.post("/api/login")
 def login_user(user: UserAuth):
     try:
         users_table = get_users_table()
