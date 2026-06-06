@@ -469,5 +469,89 @@ def generate_incident_rca(incident_id: str, current_user: dict = Depends(get_cur
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/v1/github/deployments")
+def get_github_deployments(current_user: dict = Depends(get_current_user)):
+    """Retrieves deployment logs for the authenticated tenant."""
+    try:
+        tenant_id = current_user.get("user_id")
+        table = get_deployments_table()
+        response = table.query(
+            KeyConditionExpression=Key('tenant_id').eq(tenant_id),
+            ScanIndexForward=False,
+            Limit=50
+        )
+        return response.get('Items', [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/k8s/resources")
+def get_k8s_resources(current_user: dict = Depends(get_current_user)):
+    """Returns cluster nodes, active pods, and deployment states for AKS/EKS dashboard visualization."""
+    try:
+        # Mock telemetry matching Kubernetes schema specifications
+        return {
+            "cluster_id": "aks-prod-cluster-01",
+            "provider": "Azure Kubernetes Service",
+            "region": "us-east-1",
+            "nodes": [
+                {"name": "aks-nodepool1-vm-0", "status": "Ready", "cpu_util": "48%", "mem_util": "62%"},
+                {"name": "aks-nodepool1-vm-1", "status": "Ready", "cpu_util": "35%", "mem_util": "50%"},
+                {"name": "aks-nodepool1-vm-2", "status": "Ready", "cpu_util": "72%", "mem_util": "85%"}
+            ],
+            "pods": [
+                {"name": "payment-api-cf7d685-z8a9s", "namespace": "production", "status": "Running", "restarts": 0, "cpu": "120m", "mem": "240Mi"},
+                {"name": "auth-service-5421c9b-h2n3s", "namespace": "production", "status": "Running", "restarts": 2, "cpu": "80m", "mem": "150Mi"},
+                {"name": "log-collector-flb-8h1n2", "namespace": "kube-system", "status": "Running", "restarts": 0, "cpu": "50m", "mem": "95Mi"},
+                {"name": "notification-worker-6b998-f2nsd", "namespace": "production", "status": "Running", "restarts": 1, "cpu": "110m", "mem": "180Mi"}
+            ],
+            "deployments": [
+                {"name": "payment-api", "desired": 3, "ready": 3, "updated": 3},
+                {"name": "auth-service", "desired": 2, "ready": 2, "updated": 2},
+                {"name": "notification-worker", "desired": 2, "ready": 2, "updated": 2}
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/metrics")
+def get_service_metrics(current_user: dict = Depends(get_current_user)):
+    """Compiles service-specific telemetry indicators."""
+    try:
+        tenant_id = current_user.get("user_id")
+        logs = get_logs(tenant_id, limit=100)
+        
+        # Aggregate heuristics per service
+        metrics = {}
+        for log in logs:
+            srv = log.get("service", "unknown")
+            if srv not in metrics:
+                metrics[srv] = {"latency_sum": 0.0, "latency_count": 0, "warnings": 0, "errors": 0}
+            
+            lvl = log.get("level", "INFO").upper()
+            if lvl == "WARN":
+                metrics[srv]["warnings"] += 1
+            elif lvl in ("ERROR", "CRITICAL", "FATAL"):
+                metrics[srv]["errors"] += 1
+                
+            lat = log.get("latency_ms")
+            if lat:
+                metrics[srv]["latency_sum"] += float(lat)
+                metrics[srv]["latency_count"] += 1
+                
+        results = []
+        for srv, stats in metrics.items():
+            avg_lat = stats["latency_sum"] / stats["latency_count"] if stats["latency_count"] > 0 else 0.0
+            results.append({
+                "service": srv,
+                "avg_latency": round(avg_lat, 2),
+                "warnings": stats["warnings"],
+                "errors": stats["errors"],
+                "health_score": max(0, 100 - (stats["errors"] * 10 + stats["warnings"] * 3))
+            })
+            
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

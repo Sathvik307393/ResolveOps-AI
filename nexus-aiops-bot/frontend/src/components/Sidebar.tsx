@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Cpu, LayoutDashboard, ShieldAlert, BarChart3, Users, Settings, LogOut, Lightbulb, MessageSquareCode } from "lucide-react";
+import { Cpu, GitBranch, LayoutDashboard, MessageSquareCode, Lightbulb, BarChart3, Users, Settings, LogOut } from "lucide-react";
 import Link from "next/link";
 
 export default function Sidebar() {
@@ -15,11 +15,11 @@ export default function Sidebar() {
 
   const navItems = [
     { name: "Dashboard", path: "/", icon: LayoutDashboard },
-    { name: "Incidents", path: "/kubernetes", icon: ShieldAlert },
+    { name: "K8s Explorer", path: "/kubernetes", icon: Cpu },
+    { name: "GitHub Sync", path: "/github", icon: GitBranch },
     { name: "AI Copilot", path: "/chat", icon: MessageSquareCode },
     { name: "Suggestions", path: "/suggestions", icon: Lightbulb },
     { name: "Analytics", path: "/analytics", icon: BarChart3 },
-    { name: "Team", path: "/team", icon: Users },
     { name: "Settings", path: "/settings", icon: Settings },
   ];
 
