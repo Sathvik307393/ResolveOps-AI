@@ -1,0 +1,16 @@
+[
+  {
+    "tenant_id": "test-tenant-123",
+    "timestamp": "2026-06-06T18:39:54.084690Z",
+    "role": "user",
+    "content": "Hello, can you help me design an AWS ECS Fargate cluster architecture?",
+    "image_base64": "mock_base64_data_string"
+  },
+  {
+    "tenant_id": "test-tenant-123",
+    "timestamp": "2026-06-06T18:39:54.089603Z",
+    "role": "assistant",
+    "content": "Certainly! I will output the architecture schema in an excalidraw block...",
+    "image_base64": null
+  }
+]

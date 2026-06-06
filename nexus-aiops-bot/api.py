@@ -16,7 +16,8 @@ from boto3.dynamodb.conditions import Key
 
 from database import (
     init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table,
-    store_log, get_logs, update_reliability_score, get_reliability_score, store_deployment, get_latest_deployment
+    store_log, get_logs, update_reliability_score, get_reliability_score, store_deployment, get_latest_deployment,
+    store_chat_message, get_chat_history
 )
 import notifications
 from predictive_engine import PredictiveEngine
@@ -239,15 +240,43 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     try:
+        tenant_id = current_user.get("user_id")
+        
+        # Save user message to history
+        store_chat_message(
+            tenant_id=tenant_id,
+            role="user",
+            content=request.query,
+            image_base64=request.image_base64
+        )
+        
         result = engine.run_query(
             query=request.query,
             time_window_mins=request.time_window_mins,
             image_base64=request.image_base64
         )
+        
+        answer = result.get("answer", "")
+        
+        # Save assistant response to history
+        store_chat_message(
+            tenant_id=tenant_id,
+            role="assistant",
+            content=answer
+        )
+        
         return ChatResponse(
-            answer=result.get("answer", ""),
+            answer=answer,
             citations=result.get("citations", [])
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chat/history")
+def get_chat_history_endpoint(current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_id = current_user.get("user_id")
+        return get_chat_history(tenant_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

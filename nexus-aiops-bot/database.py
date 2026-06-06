@@ -1,6 +1,8 @@
 import boto3
 import os
 import time
+import datetime
+import json
 from typing import Optional
 
 # Use the credentials and region configured in the environment
@@ -28,7 +30,7 @@ def init_dynamodb():
         )
         table.wait_until_exists()
         print("NexusUsers table created successfully!")
-
+ 
     if "NexusApiKeys" not in existing_tables:
         print("Creating NexusApiKeys DynamoDB table...")
         table = dynamodb.create_table(
@@ -60,7 +62,7 @@ def init_dynamodb():
         )
         table.wait_until_exists()
         print("NexusApiKeys table created successfully!")
-
+ 
     if "NexusIncidents" not in existing_tables:
         print("Creating NexusIncidents DynamoDB table...")
         table = dynamodb.create_table(
@@ -80,7 +82,7 @@ def init_dynamodb():
         )
         table.wait_until_exists()
         print("NexusIncidents table created successfully!")
-
+ 
     if "NexusLogs" not in existing_tables:
         print("Creating NexusLogs DynamoDB table...")
         table = dynamodb.create_table(
@@ -100,7 +102,7 @@ def init_dynamodb():
         )
         table.wait_until_exists()
         print("NexusLogs table created successfully!")
-
+ 
     if "NexusDeployments" not in existing_tables:
         print("Creating NexusDeployments DynamoDB table...")
         table = dynamodb.create_table(
@@ -121,17 +123,43 @@ def init_dynamodb():
         table.wait_until_exists()
         print("NexusDeployments table created successfully!")
 
+    if "NexusChatHistory" not in existing_tables:
+        print("Creating NexusChatHistory DynamoDB table...")
+        table = dynamodb.create_table(
+            TableName='NexusChatHistory',
+            KeySchema=[
+                {'AttributeName': 'tenant_id', 'KeyType': 'HASH'},  # Partition key
+                {'AttributeName': 'timestamp', 'KeyType': 'RANGE'}  # Sort key
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'tenant_id', 'AttributeType': 'S'},
+                {'AttributeName': 'timestamp', 'AttributeType': 'S'}
+            ],
+            ProvisionedThroughput={
+                'ReadCapacityUnits': 5,
+                'WriteCapacityUnits': 5
+            }
+        )
+        table.wait_until_exists()
+        print("NexusChatHistory table created successfully!")
+
 def get_users_table():
     return dynamodb.Table('NexusUsers')
-
+ 
 def get_keys_table():
     return dynamodb.Table('NexusApiKeys')
-
+ 
 def get_incidents_table():
     return dynamodb.Table('NexusIncidents')
-
+ 
 def get_logs_table():
     return dynamodb.Table('NexusLogs')
+ 
+def get_deployments_table():
+    return dynamodb.Table('NexusDeployments')
+
+def get_chat_history_table():
+    return dynamodb.Table('NexusChatHistory')
 
 # --- Log Storage Abstraction Layer (Repository Pattern) ---
 def store_log(tenant_id: str, timestamp: str, log_data: dict) -> bool:
@@ -154,7 +182,7 @@ def store_log(tenant_id: str, timestamp: str, log_data: dict) -> bool:
     except Exception as e:
         print(f"Log Repository write failed: {e}")
         return False
-
+ 
 def get_logs(tenant_id: str, limit: int = 50) -> list:
     """Retrieves logs using the decoupled repository layer."""
     try:
@@ -168,7 +196,7 @@ def get_logs(tenant_id: str, limit: int = 50) -> list:
     except Exception as e:
         print(f"Log Repository read failed: {e}")
         return []
-
+ 
 # --- Reliability Score Integration ---
 def update_reliability_score(email: str, score: float) -> bool:
     """Updates the user's/tenant's reliability score in their user profile."""
@@ -185,7 +213,7 @@ def update_reliability_score(email: str, score: float) -> bool:
     except Exception as e:
         print(f"Failed to update reliability score for {email}: {e}")
         return False
-
+ 
 def get_reliability_score(email: str) -> float:
     """Retrieves the reliability score for a given tenant email."""
     try:
@@ -197,10 +225,7 @@ def get_reliability_score(email: str) -> float:
     except Exception as e:
         print(f"Failed to fetch reliability score: {e}")
         return 100.0
-
-def get_deployments_table():
-    return dynamodb.Table('NexusDeployments')
-
+ 
 def store_deployment(tenant_id: str, timestamp: str, deploy_data: dict) -> bool:
     """Stores GitHub deployment metadata for correlation."""
     try:
@@ -219,7 +244,7 @@ def store_deployment(tenant_id: str, timestamp: str, deploy_data: dict) -> bool:
     except Exception as e:
         print(f"Deployment storage failed: {e}")
         return False
-
+ 
 def get_latest_deployment(tenant_id: str) -> Optional[dict]:
     """Retrieves the latest deployment for correlation."""
     try:
@@ -234,6 +259,70 @@ def get_latest_deployment(tenant_id: str) -> Optional[dict]:
     except Exception as e:
         print(f"Failed to retrieve latest deployment: {e}")
         return None
+
+# --- Chat History Management (with Local Fallback) ---
+def store_chat_message(tenant_id: str, role: str, content: str, image_base64: Optional[str] = None) -> bool:
+    """Saves a single message in the chat history repository."""
+    timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+    try:
+        table = get_chat_history_table()
+        table.put_item(Item={
+            'tenant_id': tenant_id,
+            'timestamp': timestamp,
+            'role': role,
+            'content': content,
+            'image_base64': image_base64
+        })
+        return True
+    except Exception as e:
+        print(f"DynamoDB Chat History write failed: {e}. Falling back to local file.")
+        
+    try:
+        local_path = "local_chat_history.json"
+        history = []
+        if os.path.exists(local_path):
+            with open(local_path, "r") as f:
+                history = json.load(f)
+        history.append({
+            'tenant_id': tenant_id,
+            'timestamp': timestamp,
+            'role': role,
+            'content': content,
+            'image_base64': image_base64
+        })
+        history = history[-300:] # Cap storage history size
+        with open(local_path, "w") as f:
+            json.dump(history, f, indent=2)
+        return True
+    except Exception as local_ex:
+        print(f"Local Chat History write failed: {local_ex}")
+        return False
+
+def get_chat_history(tenant_id: str, limit: int = 50) -> list:
+    """Retrieves the message logs for a given tenant."""
+    try:
+        table = get_chat_history_table()
+        response = table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('tenant_id').eq(tenant_id),
+            ScanIndexForward=True, # Oldest first so it renders in correct chronological order
+            Limit=limit
+        )
+        return response.get('Items', [])
+    except Exception as e:
+        print(f"DynamoDB Chat History read failed: {e}. Falling back to local file.")
+        
+    try:
+        local_path = "local_chat_history.json"
+        if os.path.exists(local_path):
+            with open(local_path, "r") as f:
+                history = json.load(f)
+            tenant_history = [msg for msg in history if msg.get('tenant_id') == tenant_id]
+            return tenant_history[-limit:]
+        return []
+    except Exception as local_ex:
+        print(f"Local Chat History read failed: {local_ex}")
+        return []
+
 
 
 

@@ -6,6 +6,12 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { MessageSquareCode, Send, Bot, User, Activity, Sun, Sunset, Moon, Paperclip } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
+import dynamic from "next/dynamic";
+
+const ExcalidrawBoard = dynamic(
+  () => import("@/components/ExcalidrawBoard"),
+  { ssr: false }
+);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function getGreeting(): string {
@@ -34,6 +40,21 @@ function decodeJwtPayload(token: string): Record<string, any> {
 function CodeBlock({ children, ...props }: any) {
   const [copied, setCopied] = useState(false);
   const codeRef = useRef<HTMLPreElement>(null);
+
+  // Check if inner child is Excalidraw language fenced code block
+  const codeChild = children && children.props ? children : (Array.isArray(children) ? children[0] : null);
+  if (codeChild && codeChild.props && codeChild.props.className === "language-excalidraw") {
+    try {
+      const parsedElements = JSON.parse(String(codeChild.props.children).trim());
+      return <ExcalidrawBoard elements={parsedElements.elements || []} />;
+    } catch (e) {
+      return (
+        <div className="bg-rose-950/20 border border-rose-500/30 text-rose-400 p-3 rounded-lg text-xs font-mono my-2">
+          Failed to render diagram canvas. details: {String(e)}
+        </div>
+      );
+    }
+  }
 
   const handleCopy = async () => {
     if (codeRef.current) {
@@ -96,15 +117,40 @@ export default function AICopilot() {
     const name = payload.full_name || payload.email || "";
     setFullName(name);
 
-    // Build a personalized welcome message
-    const firstName = name.split(" ")[0];
-    const greeting = getGreeting();
-    const welcome = firstName
-      ? `${greeting}, ${firstName}! 👋 I am the Nexus AI Copilot. I have full visibility into your active incidents and service logs. How can I assist you today?`
-      : `${greeting}! I am the Nexus AI Copilot. I have full visibility into your active incidents and service logs. How can I assist you today?`;
-
-    setMessages([{ role: "assistant", content: welcome }]);
-    setLoading(false);
+    // Fetch message history from API
+    fetchApi("/chat/history")
+      .then((history: any) => {
+        if (Array.isArray(history) && history.length > 0) {
+          const mapped = history.map((msg: any) => {
+            let content = msg.content || "";
+            if (msg.role === "user" && msg.image_base64) {
+              content = `🖼️ [Uploaded Architecture Diagram] ${content}`;
+            }
+            return {
+              role: msg.role || "assistant",
+              content: content
+            };
+          });
+          setMessages(mapped);
+        } else {
+          // Fallback to default greeting if history is empty
+          const firstName = name.split(" ")[0];
+          const greeting = getGreeting();
+          const welcome = firstName
+            ? `${greeting}, ${firstName}! 👋 I am the Nexus AI Copilot. I have full visibility into your active incidents and service logs. How can I assist you today?`
+            : `${greeting}! I am the Nexus AI Copilot. I have full visibility into your active incidents and service logs. How can I assist you today?`;
+          setMessages([{ role: "assistant", content: welcome }]);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load chat history:", err);
+        const greeting = getGreeting();
+        const welcome = `${greeting}! I am the Nexus AI Copilot. I have full visibility into your active incidents and service logs. How can I assist you today?`;
+        setMessages([{ role: "assistant", content: welcome }]);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [router]);
 
   useEffect(() => {
