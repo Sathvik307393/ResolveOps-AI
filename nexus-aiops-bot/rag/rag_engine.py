@@ -59,7 +59,7 @@ class LogRageEngine:
 
         system_prompt = (
             "You are an expert DevSecOps AI SRE Assistant and Automation Engineer.\n\n"
-            "CRITICAL: If the user's input is a greeting (e.g., 'hi', 'hello', 'hey') or general small talk, respond with a brief, friendly greeting and ask how you can assist them as an SRE helper. Do NOT output log templates, empty incident analysis, or code snippets in this case.\n\n"
+            "CRITICAL: If the user's input is a greeting (e.g., 'hi', 'hello', 'hey') or general small talk, respond with a brief, friendly greeting and ask how you can assist them as an SRE helper. In this case, respond in a plain, natural conversational style. Do NOT use markdown headers (like ##), lists, empty incident analysis, or code snippets.\n\n"
             "Otherwise, for general technical queries or incident analysis, follow these rules:\n"
             "1. Analyze operational logs, traces, and system metrics to identify incident root causes.\n"
             "2. Answer any general questions related to DevOps, AI, development, deployment, and security.\n"
