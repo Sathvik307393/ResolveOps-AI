@@ -6,6 +6,12 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { MessageSquareCode, Send, Bot, User, Activity, Sun, Sunset, Moon, Paperclip } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
+import dynamic from "next/dynamic";
+
+const ExcalidrawBoard = dynamic(
+  () => import("@/components/ExcalidrawBoard"),
+  { ssr: false }
+);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function getGreeting(): string {
@@ -34,6 +40,21 @@ function decodeJwtPayload(token: string): Record<string, any> {
 function CodeBlock({ children, ...props }: any) {
   const [copied, setCopied] = useState(false);
   const codeRef = useRef<HTMLPreElement>(null);
+
+  // Check if inner child is Excalidraw language fenced code block
+  const codeChild = children && children.props ? children : (Array.isArray(children) ? children[0] : null);
+  if (codeChild && codeChild.props && codeChild.props.className === "language-excalidraw") {
+    try {
+      const parsedElements = JSON.parse(String(codeChild.props.children).trim());
+      return <ExcalidrawBoard elements={parsedElements.elements || []} />;
+    } catch (e) {
+      return (
+        <div className="bg-rose-950/20 border border-rose-500/30 text-rose-400 p-3 rounded-lg text-xs font-mono my-2">
+          Failed to render diagram canvas. details: {String(e)}
+        </div>
+      );
+    }
+  }
 
   const handleCopy = async () => {
     if (codeRef.current) {
