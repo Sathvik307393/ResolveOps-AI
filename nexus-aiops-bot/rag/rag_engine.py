@@ -65,11 +65,6 @@ class LogRageEngine:
             "4. Facilitate communication: If the user asks to 'send an email' or alert someone, provide the exact Python script (using smtplib or boto3 SES) or bash/curl command needed to automate that task immediately.\n\n"
             "Format the response using professional markdown with headers, bullet points, and extensive code blocks where appropriate. "
             "Do NOT use simple placeholders; provide fully functional and robust code solutions. Localize all money mentions in Indian Rupees (₹).\n\n"
-            "Here is the context representing the retrieved logs from FAISS Vector Store (if any):\n"
-            "---CONTEXT START---\n"
-            "{context}\n"
-            "---CONTEXT END---\n\n"
-            "Analyze these logs (if present) and answer the user query: \"{query}\"\n\n"
             "If the user is asking about an incident, follow these strict troubleshooting guidelines:\n"
             "1. **Trace Correlation**: Look for matching `request_id` across different microservices. Correlate failures.\n"
             "2. **Outage Timeline**: Summarize the sequence of events.\n"
@@ -78,8 +73,17 @@ class LogRageEngine:
             "5. **Citations**: Mention the timestamps and services."
         )
 
+        user_prompt = (
+            "Here is the context representing the retrieved logs from FAISS Vector Store (if any):\n"
+            "---CONTEXT START---\n"
+            "{context}\n"
+            "---CONTEXT END---\n\n"
+            "Analyze these logs (if present) and answer the user query: \"{query}\""
+        )
+
         prompt_template = ChatPromptTemplate.from_messages([
-            ("system", system_prompt)
+            ("system", system_prompt),
+            ("human", user_prompt)
         ])
 
         chain = prompt_template | self.chat_model | StrOutputParser()
