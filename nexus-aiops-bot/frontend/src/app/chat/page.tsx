@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
-import { MessageSquareCode, Send, Bot, User, Activity, Sun, Sunset, Moon } from "lucide-react";
+import { MessageSquareCode, Send, Bot, User, Activity, Sun, Sunset, Moon, Paperclip } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 
@@ -70,7 +70,19 @@ export default function AICopilot() {
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
   const [sending, setSending] = useState(false);
   const [fullName, setFullName] = useState("");
+  const [imageFile, setImageFile] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImageFile(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("jwt_token");
@@ -100,17 +112,31 @@ export default function AICopilot() {
   }, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim() || sending) return;
+    if (!input.trim() && !imageFile) return;
 
     const userMsg = input.trim();
-    setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+    const payloadQuery = userMsg || "Analyze this uploaded infrastructure architecture diagram.";
+    
+    // Include a visual indicator in user's chat message if they uploaded an image
+    const userDisplayContent = imageFile 
+      ? `🖼️ [Uploaded Architecture Diagram] ${userMsg}`
+      : userMsg;
+
+    setMessages((prev) => [...prev, { role: "user", content: userDisplayContent }]);
     setInput("");
     setSending(true);
+
+    const currentImage = imageFile;
+    setImageFile(null);
 
     try {
       const data = await fetchApi("/chat", {
         method: "POST",
-        body: JSON.stringify({ query: userMsg, time_window_mins: 60 }),
+        body: JSON.stringify({ 
+          query: payloadQuery, 
+          time_window_mins: 60,
+          image_base64: currentImage 
+        }),
       });
       setMessages((prev) => [...prev, { role: "assistant", content: data.answer }]);
     } catch (err: any) {
@@ -216,21 +242,41 @@ export default function AICopilot() {
 
           {/* Input Area */}
           <div className="p-4 border-t border-white/10 bg-black/20">
-            <div className="relative">
+            {imageFile && (
+              <div className="mb-3 relative w-16 h-16 border border-indigo-500/50 rounded-lg overflow-hidden group bg-slate-900 flex items-center justify-center">
+                <img src={imageFile} alt="Upload preview" className="object-cover w-full h-full" />
+                <button 
+                  onClick={() => setImageFile(null)}
+                  className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-500 hover:text-rose-400 text-xs font-bold transition-opacity cursor-pointer border-none font-sans"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+            <div className="relative flex items-center bg-[#0a0a0f] border border-slate-800 rounded-xl px-4 py-2 focus-within:border-indigo-500/50 transition-all">
+              <label className="mr-3 cursor-pointer text-slate-400 hover:text-white transition-colors">
+                <Paperclip size={18} />
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={handleImageChange}
+                />
+              </label>
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                placeholder="Ask anything — analyze logs, generate K8s YAML, suggest remediations..."
-                className="w-full bg-[#0a0a0f] border border-slate-800 text-white rounded-xl px-4 py-4 pr-12 focus:outline-none focus:border-indigo-500/50 transition-all"
+                placeholder="Ask anything or attach a diagram and type 'compile this to terraform'..."
+                className="flex-1 bg-transparent text-white focus:outline-none py-2 pr-12 text-sm"
               />
               <button
                 onClick={handleSend}
                 disabled={sending}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 hover:text-indigo-300 disabled:opacity-50 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 hover:text-indigo-300 disabled:opacity-50 transition-colors cursor-pointer"
               >
-                <Send size={20} />
+                <Send size={18} />
               </button>
             </div>
           </div>

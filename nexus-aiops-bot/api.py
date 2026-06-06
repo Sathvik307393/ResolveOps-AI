@@ -66,6 +66,7 @@ otp_store: dict = {}
 class ChatRequest(BaseModel):
     query: str
     time_window_mins: Optional[int] = 30
+    image_base64: Optional[str] = None
 
 class ChatResponse(BaseModel):
     answer: str
@@ -238,8 +239,11 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     try:
-        # result = engine.run_query(request.query, request.time_window_mins, current_user['user_id'])
-        result = engine.run_query(request.query, request.time_window_mins)
+        result = engine.run_query(
+            query=request.query,
+            time_window_mins=request.time_window_mins,
+            image_base64=request.image_base64
+        )
         return ChatResponse(
             answer=result.get("answer", ""),
             citations=result.get("citations", [])
@@ -550,6 +554,42 @@ def get_service_metrics(current_user: dict = Depends(get_current_user)):
             })
             
         return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# In-memory SaaS Connection store
+integrations_store = {}
+
+class ConnectionRequest(BaseModel):
+    service: str # "github", "eks", or "aks"
+    connected: bool
+    credentials: Optional[dict] = None
+
+@app.get("/api/v1/integrations")
+def get_integrations(current_user: dict = Depends(get_current_user)):
+    """Retrieves external integration statuses for this tenant workspace."""
+    try:
+        tenant_id = current_user.get("user_id")
+        if tenant_id not in integrations_store:
+            integrations_store[tenant_id] = {"github": False, "eks": False, "aks": False}
+        return integrations_store[tenant_id]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/integrations/connect")
+def update_integration_connection(req: ConnectionRequest, current_user: dict = Depends(get_current_user)):
+    """Updates / Saves credentials and toggles connection status for an external service."""
+    try:
+        tenant_id = current_user.get("user_id")
+        if tenant_id not in integrations_store:
+            integrations_store[tenant_id] = {"github": False, "eks": False, "aks": False}
+        
+        service_key = req.service.lower()
+        if service_key in integrations_store[tenant_id]:
+            integrations_store[tenant_id][service_key] = req.connected
+            return {"status": "success", "message": f"{req.service} connection status updated", "integrations": integrations_store[tenant_id]}
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported service integration: {req.service}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

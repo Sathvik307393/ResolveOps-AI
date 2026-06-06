@@ -23,8 +23,8 @@ class LogRageEngine:
         )
         self.vector_store = None
 
-    def run_query(self, query: str, time_window_mins: int = 30) -> dict:
-        """Runs vector search on log indexes and performs root cause analysis with Claude 3"""
+    def run_query(self, query: str, time_window_mins: int = 30, image_base64: str = None) -> dict:
+        """Runs vector search on log indexes and performs root cause analysis with Bedrock model."""
 
         retrieved_logs = []
         current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -83,20 +83,44 @@ class LogRageEngine:
             "Analyze these logs (if present) and answer the user query: \"{query}\""
         )
 
-        prompt_template = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", user_prompt)
-        ])
+        from langchain_core.messages import SystemMessage, HumanMessage
 
-        chain = prompt_template | self.chat_model | StrOutputParser()
-
-        try:
-            answer = chain.invoke({
-                "context": context_str,
-                "query": query
-            })
-        except Exception as chat_ex:
-            answer = f"AI Error: Could not generate response. Details: {str(chat_ex)}"
+        if image_base64:
+            clean_b64 = image_base64
+            if "," in image_base64:
+                clean_b64 = image_base64.split(",")[1]
+                
+            formatted_user = user_prompt.format(context=context_str, query=query)
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=[
+                    {"type": "text", "text": formatted_user},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{clean_b64}"
+                        }
+                    }
+                ])
+            ]
+            chain = self.chat_model | StrOutputParser()
+            try:
+                answer = chain.invoke(messages)
+            except Exception as chat_ex:
+                answer = f"AI Vision Error: Could not generate diagram analysis. Details: {str(chat_ex)}"
+        else:
+            prompt_template = ChatPromptTemplate.from_messages([
+                ("system", system_prompt),
+                ("human", user_prompt)
+            ])
+            chain = prompt_template | self.chat_model | StrOutputParser()
+            try:
+                answer = chain.invoke({
+                    "context": context_str,
+                    "query": query
+                })
+            except Exception as chat_ex:
+                answer = f"AI Error: Could not generate response. Details: {str(chat_ex)}"
 
         return {
             "answer": answer,

@@ -20,7 +20,7 @@ export default function Sidebar() {
     { name: "AI Copilot", path: "/chat", icon: MessageSquareCode },
     { name: "Suggestions", path: "/suggestions", icon: Lightbulb },
     { name: "Analytics", path: "/analytics", icon: BarChart3 },
-    { name: "Settings", path: "/settings", icon: Settings },
+    { name: "Integrations", path: "/integrations", icon: Settings },
   ];
 
   return (
