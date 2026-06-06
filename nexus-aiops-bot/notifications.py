@@ -147,3 +147,67 @@ def notify_rca_completed(tenant_email: str, incident_id: str, service: str, rca_
     """
     subject = f"Nexus AI RCA Complete: {incident_id} ({service})"
     return _send_smtp(tenant_email, subject, _html_wrapper("Root Cause Analysis Ready", body))
+
+
+def notify_predictive_alert(
+    tenant_email: str,
+    service: str,
+    failure_type: str,
+    risk_score: float,
+    confidence_score: float,
+    probable_cause: str,
+    suggested_remediation: str,
+    deployment_context: dict = None,
+    full_name: str = ""
+) -> bool:
+    """Sends a premium, proactive warning email before a failure occurs."""
+    first_name = full_name.split()[0] if full_name else "Engineer"
+    
+    # Render deployment context if present
+    deploy_html = ""
+    if deployment_context:
+        deploy_html = f"""
+        <h3 style="color:#f1f5f9; font-size:14px; margin-top:20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom:6px;">Correlated Deployment Event</h3>
+        <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+          <tr><td style="color:#64748b; padding: 4px 0; font-size:13px; width:120px;">Repository</td><td style="color:#f1f5f9; font-size:13px;">{deployment_context.get('repository')}</td></tr>
+          <tr><td style="color:#64748b; padding: 4px 0; font-size:13px;">Author</td><td style="color:#f1f5f9; font-size:13px;">{deployment_context.get('author')}</td></tr>
+          <tr><td style="color:#64748b; padding: 4px 0; font-size:13px;">Commit Msg</td><td style="color:#a5b4fc; font-size:13px;">{deployment_context.get('commit_msg')}</td></tr>
+          <tr><td style="color:#64748b; padding: 4px 0; font-size:13px;">Commit SHA</td><td style="color:#f1f5f9; font-family:monospace; font-size:12px;">{deployment_context.get('commit_sha')[:7]}</td></tr>
+        </table>
+        """
+
+    body = f"""
+        <p>Hi <strong>{first_name}</strong>,</p>
+        <p style="color:#f43f5e; font-weight:600; font-size:15px;">⚠️ Proactive Alert: Impending Outage Predicted</p>
+        <p>Nexus AI has detected anomalous log patterns suggesting a potential failure in your service. Operational stats indicate an elevated risk profile.</p>
+        
+        <div class="card">
+          <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+            <tr><td style="color:#64748b; padding: 6px 0; font-size:13px; width:140px;">Affected Service</td><td style="color:#f1f5f9; font-weight:600; font-size:13px;">{service}</td></tr>
+            <tr><td style="color:#64748b; padding: 6px 0; font-size:13px;">Predicted Failure</td><td style="color:#f87171; font-weight:600; font-size:13px;">{failure_type}</td></tr>
+            <tr>
+              <td style="color:#64748b; padding: 6px 0; font-size:13px;">Risk Score</td>
+              <td><span class="badge-critical" style="background:rgba(244,63,94,0.15); color:#f43f5e; border-color:rgba(244,63,94,0.25);">{risk_score}% Risk</span></td>
+            </tr>
+            <tr>
+              <td style="color:#64748b; padding: 6px 0; font-size:13px;">Confidence Score</td>
+              <td><span class="badge-warning" style="background:rgba(245,158,11,0.15); color:#fbbf24; border-color:rgba(245,158,11,0.25);">{confidence_score}% Confidence</span></td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="card" style="background:#0f172a; border-left:4px solid #f59e0b;">
+          <h4 style="margin:0 0 8px 0; color:#fbbf24; font-size:14px;">AI-Assisted Predictive RCA</h4>
+          <p style="margin:0; font-size:13px; color:#e2e8f0; line-height:1.5;">{probable_cause}</p>
+        </div>
+
+        {deploy_html}
+
+        <h3 style="color:#f1f5f9; font-size:14px; margin-top:20px;">Suggested Remediation Steps</h3>
+        <pre>{suggested_remediation}</pre>
+
+        <a href="{DASHBOARD_URL}" class="btn" style="background:linear-gradient(135deg, #f59e0b, #d97706);">Mitigate Threat Now →</a>
+    """
+    subject = f"[PREDICTIVE ALERT] Impending failure forecasted for {service}"
+    return _send_smtp(tenant_email, subject, _html_wrapper("Proactive Incident Prevention Alert", body))
+

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { MessageSquareCode, Send, Bot, User, Activity, Sun, Sunset, Moon } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import ReactMarkdown from "react-markdown";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function getGreeting(): string {
@@ -130,13 +131,34 @@ export default function AICopilot() {
                     {msg.role === "user" ? <User size={16} /> : <Bot size={16} />}
                   </div>
                   <div
-                    className={`p-4 rounded-2xl whitespace-pre-wrap ${
+                    className={`p-4 rounded-2xl ${
                       msg.role === "user"
-                        ? "bg-indigo-600/20 border border-indigo-500/30 text-indigo-100"
+                        ? "bg-indigo-600/20 border border-indigo-500/30 text-indigo-100 whitespace-pre-wrap"
                         : "bg-black/40 border border-white/10 text-slate-300 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
                     }`}
                   >
-                    {msg.content}
+                    {msg.role === "user" ? (
+                      msg.content
+                    ) : (
+                      <div className="text-slate-300 max-w-none text-sm leading-relaxed">
+                        <ReactMarkdown
+                          components={{
+                            pre: ({ ...props }) => <pre className="bg-[#020617] border border-white/10 rounded-lg p-4 my-2 overflow-x-auto font-mono text-xs text-slate-300" {...props} />,
+                            code: ({ ...props }) => <code className="bg-slate-800 text-indigo-300 px-1 py-0.5 rounded text-xs font-mono" {...props} />,
+                            h1: ({ ...props }) => <h1 className="text-lg font-bold text-white mt-4 mb-2 first:mt-0" {...props} />,
+                            h2: ({ ...props }) => <h2 className="text-md font-semibold text-white mt-3 mb-1 first:mt-0" {...props} />,
+                            h3: ({ ...props }) => <h3 className="text-sm font-semibold text-slate-200 mt-2 mb-1 first:mt-0" {...props} />,
+                            ul: ({ ...props }) => <ul className="list-disc pl-5 space-y-1 my-2" {...props} />,
+                            ol: ({ ...props }) => <ol className="list-decimal pl-5 space-y-1 my-2" {...props} />,
+                            li: ({ ...props }) => <li className="text-slate-300" {...props} />,
+                            p: ({ ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+                            a: ({ ...props }) => <a className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

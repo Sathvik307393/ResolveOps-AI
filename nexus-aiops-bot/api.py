@@ -14,8 +14,15 @@ import uuid
 import boto3
 from boto3.dynamodb.conditions import Key
 
-from database import init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table
+from database import (
+    init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table,
+    store_log, get_logs, update_reliability_score, get_reliability_score, store_deployment, get_latest_deployment
+)
 import notifications
+from predictive_engine import PredictiveEngine
+
+# Initialize Predictive Engine
+predictive_engine = PredictiveEngine()
 
 # Initialize tables if they don't exist
 try:
@@ -240,7 +247,7 @@ async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(get_c
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- Telemetry Ingress ---
+# --- Telemetry Ingress Models ---
 class NexusEvent(BaseModel):
     service: str
     level: str
@@ -248,27 +255,86 @@ class NexusEvent(BaseModel):
     latency_ms: Optional[float] = None
     status_code: Optional[int] = None
     request_id: Optional[str] = None
+    cluster_id: Optional[str] = None
+    resource_id: Optional[str] = None
+
+class GitHubDeploymentEvent(BaseModel):
+    commit_sha: str
+    commit_msg: str
+    author: str
+    repository: str
+    workflow_run_id: Optional[str] = None
+    pr_url: Optional[str] = None
+
+@app.post("/api/v1/github/webhook")
+def github_webhook(event: GitHubDeploymentEvent, current_user: dict = Depends(get_current_user)):
+    """Receives GitHub Deployment and Workflow Run details for telemetry correlation."""
+    try:
+        tenant_id = current_user.get("user_id")
+        timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+        
+        success = store_deployment(
+            tenant_id=tenant_id,
+            timestamp=timestamp,
+            deploy_data={
+                "commit_sha": event.commit_sha,
+                "commit_msg": event.commit_msg,
+                "author": event.author,
+                "repository": event.repository,
+                "workflow_run_id": event.workflow_run_id,
+                "pr_url": event.pr_url
+            }
+        )
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to store deployment correlation context")
+
+        # Ingest a system log indicating a deployment occurred
+        store_log(
+            tenant_id=tenant_id,
+            timestamp=timestamp,
+            log_data={
+                "service": "github-actions",
+                "level": "INFO",
+                "message": f"Deployment Completed: {event.repository} (Commit: {event.commit_sha[:7]} by {event.author})",
+                "cluster_id": "github",
+                "resource_id": event.workflow_run_id
+            }
+        )
+        return {"status": "success", "message": "GitHub deployment recorded"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/ingest")
 def ingest_telemetry(event: NexusEvent, current_user: dict = Depends(get_current_user)):
     try:
-        tenant_id = current_user.get("user_id") # Map API key to tenant/user
-        logs_table = get_logs_table()
+        tenant_id = current_user.get("user_id")
+        tenant_email = current_user.get("email")
         timestamp = datetime.datetime.utcnow().isoformat() + "Z"
         
-        logs_table.put_item(Item={
-            'tenant_id': tenant_id,
-            'timestamp': timestamp,
-            'service': event.service,
-            'level': event.level,
-            'message': event.message,
-            'latency_ms': str(event.latency_ms) if event.latency_ms else None,
-            'status_code': event.status_code,
-            'request_id': event.request_id
-        })
+        # Abstraction Layer Log Write (Future proofed repository pattern)
+        store_log(
+            tenant_id=tenant_id,
+            timestamp=timestamp,
+            log_data={
+                "service": event.service,
+                "level": event.level,
+                "message": event.message,
+                "latency_ms": event.latency_ms,
+                "status_code": event.status_code,
+                "request_id": event.request_id,
+                "cluster_id": event.cluster_id,
+                "resource_id": event.resource_id
+            }
+        )
         
-        # Super simple mock incident trigger for "ERROR" severity
-        if event.level.upper() in ["ERROR", "CRITICAL", "FATAL"]:
+        is_reactive = event.level.upper() in ["ERROR", "CRITICAL", "FATAL"]
+
+        if is_reactive:
+            # --- 1. Reactive Pipeline ---
+            # Update Reliability Score (Deduct 5.0 points)
+            current_score = get_reliability_score(tenant_email)
+            update_reliability_score(tenant_email, current_score - 5.0)
+
             incident_id = f"INC-{uuid.uuid4().hex[:8].upper()}"
             incidents_table = get_incidents_table()
             incidents_table.put_item(Item={
@@ -280,17 +346,59 @@ def ingest_telemetry(event: NexusEvent, current_user: dict = Depends(get_current
                 'created_at': timestamp,
                 'rca_report': ''
             })
+            
             # Dispatch email using the Notification Framework
             notifications.notify_incident_created(
-                tenant_email=current_user.get("email"),
+                tenant_email=tenant_email,
                 incident_id=incident_id,
                 service=event.service,
-                severity=event.level.upper()
+                severity=event.level.upper(),
+                full_name=current_user.get("full_name", "")
             )
+        else:
+            # --- 2. Predictive Pipeline ---
+            # Fetch recent logs for analyzing trends
+            recent_logs = get_logs(tenant_id, limit=50)
             
-        return {"status": "success", "message": "Log ingested"}
+            # Evaluate using predictive heuristics
+            is_anomaly, prediction = predictive_engine.analyze_logs_and_predict(recent_logs)
+            if is_anomaly and prediction:
+                # Update Reliability Score (Deduct 2.0 points for proactive threat)
+                current_score = get_reliability_score(tenant_email)
+                update_reliability_score(tenant_email, current_score - 2.0)
+
+                # Correlate with recent GitHub Deployment
+                latest_deploy = get_latest_deployment(tenant_id)
+
+                # Generate AI-assisted Predictive RCA
+                rca_details = predictive_engine.generate_predictive_rca(prediction, latest_deploy)
+                
+                # Combine predictive alerts & trigger notification
+                notifications.notify_predictive_alert(
+                    tenant_email=tenant_email,
+                    service=prediction["service"],
+                    failure_type=prediction["failure_type"],
+                    risk_score=prediction["risk_score"],
+                    confidence_score=prediction["confidence_score"],
+                    probable_cause=rca_details["probable_cause"],
+                    suggested_remediation=rca_details["suggested_remediation"],
+                    deployment_context=latest_deploy,
+                    full_name=current_user.get("full_name", "")
+                )
+            
+        return {"status": "success", "message": "Log ingested and processed"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingest Error: {str(e)}")
+
+@app.get("/api/v1/reliability")
+def get_reliability(current_user: dict = Depends(get_current_user)):
+    """Retrieves the current reliability score for the tenant."""
+    try:
+        tenant_email = current_user.get("email")
+        score = get_reliability_score(tenant_email)
+        return {"reliability_score": score}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/logs")
 def get_logs(current_user: dict = Depends(get_current_user)):
