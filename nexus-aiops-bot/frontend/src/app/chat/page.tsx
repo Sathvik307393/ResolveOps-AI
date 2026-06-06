@@ -31,6 +31,38 @@ function decodeJwtPayload(token: string): Record<string, any> {
   }
 }
 
+function CodeBlock({ children, ...props }: any) {
+  const [copied, setCopied] = useState(false);
+  const codeRef = useRef<HTMLPreElement>(null);
+
+  const handleCopy = async () => {
+    if (codeRef.current) {
+      const text = codeRef.current.innerText || "";
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className="relative group my-2">
+      <button
+        onClick={handleCopy}
+        className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-2.5 py-1 rounded text-[11px] border border-white/10 flex items-center gap-1 cursor-pointer font-sans"
+      >
+        {copied ? "Copied!" : "Copy"}
+      </button>
+      <pre
+        ref={codeRef}
+        className="bg-[#020617] border border-white/10 rounded-lg p-4 overflow-x-auto font-mono text-xs text-slate-300"
+        {...props}
+      >
+        {children}
+      </pre>
+    </div>
+  );
+}
+
 export default function AICopilot() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -143,7 +175,7 @@ export default function AICopilot() {
                       <div className="text-slate-300 max-w-none text-sm leading-relaxed">
                         <ReactMarkdown
                           components={{
-                            pre: ({ ...props }) => <pre className="bg-[#020617] border border-white/10 rounded-lg p-4 my-2 overflow-x-auto font-mono text-xs text-slate-300" {...props} />,
+                            pre: ({ ...props }) => <CodeBlock {...props} />,
                             code: ({ ...props }) => <code className="bg-slate-800 text-indigo-300 px-1 py-0.5 rounded text-xs font-mono" {...props} />,
                             h1: ({ ...props }) => <h1 className="text-lg font-bold text-white mt-4 mb-2 first:mt-0" {...props} />,
                             h2: ({ ...props }) => <h2 className="text-md font-semibold text-white mt-3 mb-1 first:mt-0" {...props} />,
