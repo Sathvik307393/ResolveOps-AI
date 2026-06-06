@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { MessageSquareCode, Send, Bot, User, Activity, Sun, Sunset, Moon, Paperclip } from "lucide-react";
 import { fetchApi } from "@/lib/api";
@@ -86,6 +86,7 @@ function CodeBlock({ children, ...props }: any) {
 
 export default function AICopilot() {
   const router = useRouter();
+  const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
@@ -141,6 +142,14 @@ export default function AICopilot() {
             : `${greeting}! I am the Nexus AI Copilot. I have full visibility into your active incidents and service logs. How can I assist you today?`;
           setMessages([{ role: "assistant", content: welcome }]);
         }
+
+        // Process search parameter 'q' on initial load
+        if (typeof window !== 'undefined') {
+          const queryParam = new URLSearchParams(window.location.search).get("q");
+          if (queryParam) {
+            setInput(queryParam);
+          }
+        }
       })
       .catch((err) => {
         console.error("Failed to load chat history:", err);
@@ -152,6 +161,16 @@ export default function AICopilot() {
         setLoading(false);
       });
   }, [router]);
+
+  // Listen to URL search parameter updates (e.g. when clicking sidebar queries while on the chat page)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const queryParam = new URLSearchParams(window.location.search).get("q");
+      if (queryParam) {
+        setInput(queryParam);
+      }
+    }
+  }, [pathname]); // pathname or trigger from URL changes
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -185,6 +204,9 @@ export default function AICopilot() {
         }),
       });
       setMessages((prev) => [...prev, { role: "assistant", content: data.answer }]);
+      
+      // Dispatch custom event to notify sidebar of updates
+      window.dispatchEvent(new Event("chat-updated"));
     } catch (err: any) {
       setMessages((prev) => [
         ...prev,
