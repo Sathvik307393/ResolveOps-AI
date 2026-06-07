@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Excalidraw } from "@excalidraw/excalidraw";
+import "@excalidraw/excalidraw/index.css";
 
 interface ExcalidrawBoardProps {
   elements: any[];

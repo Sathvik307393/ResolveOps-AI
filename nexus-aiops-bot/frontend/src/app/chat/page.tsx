@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { MessageSquareCode, Send, Bot, User, Activity, Sun, Sunset, Moon, Paperclip } from "lucide-react";
@@ -37,20 +37,51 @@ function decodeJwtPayload(token: string): Record<string, any> {
   }
 }
 
+// Recursive helper to safely search through MDX/Markdown children trees to locate excalidraw JSON text.
+function findExcalidrawCode(children: any): { codeText: string } | null {
+  if (!children) return null;
+  if (Array.isArray(children)) {
+    for (const child of children) {
+      const res = findExcalidrawCode(child);
+      if (res) return res;
+    }
+    return null;
+  }
+  if (children.props) {
+    const className = children.props.className || "";
+    if (typeof className === "string" && className.includes("language-excalidraw")) {
+      const childrenVal = children.props.children;
+      const codeText = Array.isArray(childrenVal) ? childrenVal.join("") : String(childrenVal || "");
+      return { codeText };
+    }
+    if (children.props.children) {
+      return findExcalidrawCode(children.props.children);
+    }
+  }
+  return null;
+}
+
 function CodeBlock({ children, ...props }: any) {
   const [copied, setCopied] = useState(false);
   const codeRef = useRef<HTMLPreElement>(null);
 
-  // Check if inner child is Excalidraw language fenced code block
-  const codeChild = children && children.props ? children : (Array.isArray(children) ? children[0] : null);
-  if (codeChild && codeChild.props && codeChild.props.className === "language-excalidraw") {
+  const excalidraw = useMemo(() => {
+    return findExcalidrawCode(children);
+  }, [children]);
+
+  if (excalidraw) {
     try {
-      const parsedElements = JSON.parse(String(codeChild.props.children).trim());
+      const parsedElements = JSON.parse(excalidraw.codeText.trim());
       return <ExcalidrawBoard elements={parsedElements.elements || []} />;
     } catch (e) {
       return (
-        <div className="bg-rose-950/20 border border-rose-500/30 text-rose-400 p-3 rounded-lg text-xs font-mono my-2">
-          Failed to render diagram canvas. details: {String(e)}
+        <div>
+          <div className="bg-rose-950/20 border border-rose-500/30 text-rose-400 p-3 rounded-lg text-xs font-mono my-2">
+            Failed to render diagram canvas. details: {String(e)}
+          </div>
+          <pre className="bg-[#020617] border border-white/10 rounded-lg p-4 overflow-x-auto font-mono text-xs text-slate-400 mt-2">
+            {excalidraw.codeText}
+          </pre>
         </div>
       );
     }
