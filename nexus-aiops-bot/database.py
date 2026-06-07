@@ -143,6 +143,26 @@ def init_dynamodb():
         table.wait_until_exists()
         print("NexusChatHistory table created successfully!")
 
+    if "NexusPredictiveRisks" not in existing_tables:
+        print("Creating NexusPredictiveRisks DynamoDB table...")
+        table = dynamodb.create_table(
+            TableName='NexusPredictiveRisks',
+            KeySchema=[
+                {'AttributeName': 'tenant_id', 'KeyType': 'HASH'},  # Partition key
+                {'AttributeName': 'timestamp', 'KeyType': 'RANGE'}  # Sort key
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'tenant_id', 'AttributeType': 'S'},
+                {'AttributeName': 'timestamp', 'AttributeType': 'S'}
+            ],
+            ProvisionedThroughput={
+                'ReadCapacityUnits': 5,
+                'WriteCapacityUnits': 5
+            }
+        )
+        table.wait_until_exists()
+        print("NexusPredictiveRisks table created successfully!")
+
 def get_users_table():
     return dynamodb.Table('NexusUsers')
  
@@ -161,6 +181,9 @@ def get_deployments_table():
 def get_chat_history_table():
     return dynamodb.Table('NexusChatHistory')
 
+def get_predictive_risks_table():
+    return dynamodb.Table('NexusPredictiveRisks')
+
 # --- Log Storage Abstraction Layer (Repository Pattern) ---
 def store_log(tenant_id: str, timestamp: str, log_data: dict) -> bool:
     """Stores a log entry using the decoupled repository layer."""
@@ -169,6 +192,8 @@ def store_log(tenant_id: str, timestamp: str, log_data: dict) -> bool:
         table.put_item(Item={
             'tenant_id': tenant_id,
             'timestamp': timestamp,
+            'provider': log_data.get('provider', 'unknown'),
+            'resource_type': log_data.get('resource_type', 'unknown'),
             'service': log_data.get('service', 'unknown'),
             'level': log_data.get('level', 'INFO'),
             'message': log_data.get('message', ''),
@@ -323,6 +348,37 @@ def get_chat_history(tenant_id: str, limit: int = 50) -> list:
         print(f"Local Chat History read failed: {local_ex}")
         return []
 
+# --- Predictive Risks Management ---
+def store_predictive_risk(tenant_id: str, risk_data: dict) -> bool:
+    timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+    try:
+        table = get_predictive_risks_table()
+        table.put_item(Item={
+            'tenant_id': tenant_id,
+            'timestamp': timestamp,
+            'provider': risk_data.get('provider'),
+            'resource_type': risk_data.get('resource_type'),
+            'resource_name': risk_data.get('resource_name'),
+            'risk_score': risk_data.get('risk_score'),
+            'confidence_score': risk_data.get('confidence_score'),
+            'ettf_minutes': risk_data.get('ettf_minutes'),
+            'analysis': risk_data.get('analysis'),
+            'recommendation': risk_data.get('recommendation')
+        })
+        return True
+    except Exception as e:
+        print(f"DynamoDB Predictive Risks write failed: {e}")
+        return False
 
-
-
+def get_predictive_risks(tenant_id: str, limit: int = 50) -> list:
+    try:
+        table = get_predictive_risks_table()
+        response = table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('tenant_id').eq(tenant_id),
+            ScanIndexForward=False, # Newest first
+            Limit=limit
+        )
+        return response.get('Items', [])
+    except Exception as e:
+        print(f"DynamoDB Predictive Risks read failed: {e}")
+        return []

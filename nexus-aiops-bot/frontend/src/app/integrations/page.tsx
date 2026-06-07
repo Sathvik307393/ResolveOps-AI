@@ -3,20 +3,26 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
-import { GitBranch, Cpu, Database, Activity, ShieldCheck, ShieldAlert, Key } from "lucide-react";
+import { GitBranch, Cpu, Database, Activity, Key, Server, Layers, AppWindow } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
 interface IntegrationsState {
   github: boolean;
   eks: boolean;
   aks: boolean;
+  aws_ec2: boolean;
+  azure_vm: boolean;
+  azure_vmss: boolean;
+  azure_app_service: boolean;
 }
 
 export default function IntegrationsManager() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<IntegrationsState>({ github: false, eks: false, aks: false });
-  const [activeModal, setActiveModal] = useState<"github" | "eks" | "aks" | null>(null);
+  const [status, setStatus] = useState<IntegrationsState>({ 
+    github: false, eks: false, aks: false, aws_ec2: false, azure_vm: false, azure_vmss: false, azure_app_service: false 
+  });
+  const [activeModal, setActiveModal] = useState<"github" | "eks" | "aks" | "aws_ec2" | "azure_vm" | "azure_vmss" | "azure_app_service" | null>(null);
   
   // Modal Fields
   const [awsRole, setAwsRole] = useState("");
@@ -43,7 +49,7 @@ export default function IntegrationsManager() {
     loadIntegrations();
   }, [router]);
 
-  const handleToggleConnect = async (service: "github" | "eks" | "aks", isConnect: boolean, credentials?: any) => {
+  const handleToggleConnect = async (service: keyof IntegrationsState, isConnect: boolean, credentials?: any) => {
     try {
       const data = await fetchApi("/api/v1/integrations/connect", {
         method: "POST",
@@ -73,10 +79,61 @@ export default function IntegrationsManager() {
     );
   }
 
+  const renderCard = (
+    key: keyof IntegrationsState, 
+    title: string, 
+    desc: string, 
+    icon: any, 
+    color: string, 
+    bg: string, 
+    modalKey?: string
+  ) => {
+    const isConnected = status[key];
+    const Icon = icon;
+    
+    return (
+      <div className="glass-panel border border-slate-800 rounded-xl p-6 flex flex-col justify-between" key={key}>
+        <div>
+          <div className="flex justify-between items-start mb-4">
+            <div className={`p-3 bg-slate-800 rounded-lg ${color}`}>
+              <Icon size={22} />
+            </div>
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+              isConnected ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"
+            }`}>
+              {isConnected ? "Connected" : "Disconnected"}
+            </span>
+          </div>
+          <h3 className="text-white font-semibold text-lg mb-1">{title}</h3>
+          <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
+        </div>
+        <button
+          onClick={() => {
+            if (isConnected) {
+              handleToggleConnect(key, false);
+            } else {
+              if (modalKey) {
+                setActiveModal(key as any);
+              } else {
+                handleToggleConnect(key, true);
+              }
+            }
+          }}
+          className={`mt-6 w-full py-2 rounded-lg text-xs font-semibold tracking-wide border cursor-pointer transition-all ${
+            isConnected 
+              ? "bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20" 
+              : "bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500"
+          }`}
+        >
+          {isConnected ? `Disconnect ${title}` : (modalKey ? "Configure Connection" : "Connect Now")}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <DashboardLayout>
-      <div className="flex flex-col h-full space-y-6 font-sans">
-        {/* Header */}
+      <div className="flex flex-col h-full space-y-6 font-sans pb-10">
         <div>
           <h2 className="text-xl font-bold tracking-wide text-white">Central Connections & Integrations</h2>
           <p className="text-sm text-slate-500 mt-1">
@@ -84,124 +141,31 @@ export default function IntegrationsManager() {
           </p>
         </div>
 
-        {/* Card Grid */}
+        <h3 className="text-sm font-semibold text-slate-300 mt-4 border-b border-slate-800 pb-2">Version Control</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* GitHub Card */}
-          <div className="glass-panel border border-slate-800 rounded-xl p-6 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-4">
-                <div className="p-3 bg-slate-800 rounded-lg text-indigo-400">
-                  <GitBranch size={22} />
-                </div>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                  status.github ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"
-                }`}>
-                  {status.github ? "Connected" : "Disconnected"}
-                </span>
-              </div>
-              <h3 className="text-white font-semibold text-lg mb-1">GitHub Integration</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Connect your source repositories to automatically log releases, capture workflow runs, and correlate deployment anomalies.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                if (status.github) {
-                  handleToggleConnect("github", false);
-                } else {
-                  // Simulate immediate OAuth trigger
-                  handleToggleConnect("github", true);
-                }
-              }}
-              className={`mt-6 w-full py-2 rounded-lg text-xs font-semibold tracking-wide border cursor-pointer transition-all ${
-                status.github 
-                  ? "bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20" 
-                  : "bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500"
-              }`}
-            >
-              {status.github ? "Disconnect GitHub" : "Connect via OAuth"}
-            </button>
-          </div>
-
-          {/* AWS EKS Card */}
-          <div className="glass-panel border border-slate-800 rounded-xl p-6 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-4">
-                <div className="p-3 bg-slate-800 rounded-lg text-amber-400">
-                  <Cpu size={22} />
-                </div>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                  status.eks ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"
-                }`}>
-                  {status.eks ? "Connected" : "Disconnected"}
-                </span>
-              </div>
-              <h3 className="text-white font-semibold text-lg mb-1">AWS EKS Cluster</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Stream EKS container console logs directly from CloudWatch logs by delegating access via a secure Cross-Account IAM Role ARN.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                if (status.eks) {
-                  handleToggleConnect("eks", false);
-                } else {
-                  setActiveModal("eks");
-                }
-              }}
-              className={`mt-6 w-full py-2 rounded-lg text-xs font-semibold tracking-wide border cursor-pointer transition-all ${
-                status.eks 
-                  ? "bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20" 
-                  : "bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500"
-              }`}
-            >
-              {status.eks ? "Disconnect EKS" : "Configure Connection"}
-            </button>
-          </div>
-
-          {/* Azure AKS Card */}
-          <div className="glass-panel border border-slate-800 rounded-xl p-6 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-4">
-                <div className="p-3 bg-slate-800 rounded-lg text-sky-400">
-                  <Database size={22} />
-                </div>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                  status.aks ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"
-                }`}>
-                  {status.aks ? "Connected" : "Disconnected"}
-                </span>
-              </div>
-              <h3 className="text-white font-semibold text-lg mb-1">Azure AKS Cluster</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Log into Azure Monitor and forward AKS container logs by providing service credentials for an authorized Service Principal.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                if (status.aks) {
-                  handleToggleConnect("aks", false);
-                } else {
-                  setActiveModal("aks");
-                }
-              }}
-              className={`mt-6 w-full py-2 rounded-lg text-xs font-semibold tracking-wide border cursor-pointer transition-all ${
-                status.aks 
-                  ? "bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20" 
-                  : "bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500"
-              }`}
-            >
-              {status.aks ? "Disconnect AKS" : "Configure Connection"}
-            </button>
-          </div>
+          {renderCard("github", "GitHub Integration", "Connect your source repositories to automatically log releases and capture workflow runs.", GitBranch, "text-indigo-400", "bg-indigo-400/10")}
         </div>
 
-        {/* AWS Connection Modal */}
-        {activeModal === "eks" && (
+        <h3 className="text-sm font-semibold text-slate-300 mt-6 border-b border-slate-800 pb-2">AWS Resources</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {renderCard("eks", "AWS EKS Cluster", "Stream EKS container console logs directly from CloudWatch.", Cpu, "text-amber-400", "bg-amber-400/10", "aws")}
+          {renderCard("aws_ec2", "AWS EC2 Instances", "Monitor virtual machines and analyze system logs across EC2 instances.", Server, "text-orange-400", "bg-orange-400/10", "aws")}
+        </div>
+
+        <h3 className="text-sm font-semibold text-slate-300 mt-6 border-b border-slate-800 pb-2">Azure Resources</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {renderCard("aks", "Azure AKS Cluster", "Forward AKS container logs by providing service credentials.", Database, "text-sky-400", "bg-sky-400/10", "azure")}
+          {renderCard("azure_vm", "Azure Virtual Machines", "Link Azure VMs for deep log analysis and performance metrics.", Server, "text-blue-400", "bg-blue-400/10", "azure")}
+          {renderCard("azure_vmss", "Azure VM Scale Sets", "Monitor auto-scaling node groups and instance telemetry.", Layers, "text-cyan-400", "bg-cyan-400/10", "azure")}
+          {renderCard("azure_app_service", "Azure App Services", "Integrate web apps to capture application logs and traces.", AppWindow, "text-teal-400", "bg-teal-400/10", "azure")}
+        </div>
+
+        {/* AWS Modal */}
+        {(activeModal === "eks" || activeModal === "aws_ec2") && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="glass-panel border border-slate-800 w-full max-w-md rounded-2xl overflow-hidden relative shadow-2xl p-6 space-y-4">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Key className="text-amber-400" /> Connect AWS EKS Cluster
+                <Key className="text-amber-400" /> Connect AWS {activeModal === "eks" ? "EKS" : "EC2"}
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
                 NexusAI requires read-only permissions to poll CloudWatch. Create an IAM Role in your AWS console delegating access.
@@ -236,7 +200,7 @@ export default function IntegrationsManager() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleToggleConnect("eks", true, { role_arn: awsRole, region: awsRegion })}
+                  onClick={() => handleToggleConnect(activeModal as keyof IntegrationsState, true, { role_arn: awsRole, region: awsRegion })}
                   disabled={!awsRole}
                   className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50 cursor-pointer"
                 >
@@ -247,12 +211,12 @@ export default function IntegrationsManager() {
           </div>
         )}
 
-        {/* Azure Connection Modal */}
-        {activeModal === "aks" && (
+        {/* Azure Modal */}
+        {(activeModal === "aks" || activeModal === "azure_vm" || activeModal === "azure_vmss" || activeModal === "azure_app_service") && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="glass-panel border border-slate-800 w-full max-w-md rounded-2xl overflow-hidden relative shadow-2xl p-6 space-y-4">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Key className="text-sky-400" /> Connect Azure AKS Cluster
+                <Key className="text-sky-400" /> Connect Azure Resource
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
                 Provide Service Principal access credentials to authorize log data forwarding.
@@ -297,7 +261,7 @@ export default function IntegrationsManager() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleToggleConnect("aks", true, { client_id: azureClient, client_secret: azureSecret, tenant_id: azureTenant })}
+                  onClick={() => handleToggleConnect(activeModal as keyof IntegrationsState, true, { client_id: azureClient, client_secret: azureSecret, tenant_id: azureTenant })}
                   disabled={!azureTenant || !azureClient || !azureSecret}
                   className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50 cursor-pointer"
                 >

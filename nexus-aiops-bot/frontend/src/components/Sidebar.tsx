@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Cpu, GitBranch, LayoutDashboard, MessageSquareCode, Lightbulb, BarChart3, Settings, LogOut, MessageSquare } from "lucide-react";
+import { Cpu, GitBranch, LayoutDashboard, MessageSquareCode, Lightbulb, BarChart3, Settings, LogOut, MessageSquare, Server, Layers, AppWindow } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
@@ -10,7 +10,7 @@ export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const [history, setHistory] = useState<string[]>([]);
-  const [integrations, setIntegrations] = useState({ github: false, eks: false, aks: false });
+  const [integrations, setIntegrations] = useState<any>({ github: false, eks: false, aks: false, aws_ec2: false, azure_vm: false, azure_vmss: false, azure_app_service: false });
 
   const loadHistory = () => {
     const token = typeof window !== 'undefined' && localStorage.getItem("jwt_token");
@@ -65,6 +65,10 @@ export default function Sidebar() {
   const navItems = [
     { name: "Dashboard", path: "/", icon: LayoutDashboard },
     ...(integrations.eks || integrations.aks ? [{ name: "K8s Explorer", path: "/kubernetes", icon: Cpu }] : []),
+    ...(integrations.aws_ec2 ? [{ name: "AWS EC2 Explorer", path: "/aws/ec2", icon: Server }] : []),
+    ...(integrations.azure_vm ? [{ name: "Azure VM Explorer", path: "/azure/vm", icon: Server }] : []),
+    ...(integrations.azure_vmss ? [{ name: "Azure VMSS Explorer", path: "/azure/vmss", icon: Layers }] : []),
+    ...(integrations.azure_app_service ? [{ name: "App Service Explorer", path: "/azure/app-service", icon: AppWindow }] : []),
     ...(integrations.github ? [{ name: "GitHub Sync", path: "/github", icon: GitBranch }] : []),
     { name: "AI Copilot", path: "/chat", icon: MessageSquareCode },
     { name: "Suggestions", path: "/suggestions", icon: Lightbulb },

@@ -17,7 +17,7 @@ from boto3.dynamodb.conditions import Key
 from database import (
     init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table,
     store_log, get_logs, update_reliability_score, get_reliability_score, store_deployment, get_latest_deployment,
-    store_chat_message, get_chat_history
+    store_chat_message, get_chat_history, get_predictive_risks
 )
 import notifications
 from predictive_engine import PredictiveEngine
@@ -281,6 +281,20 @@ def get_chat_history_endpoint(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # --- Telemetry Ingress Models ---
+class UniversalEvent(BaseModel):
+    provider: str
+    resource_type: str
+    resource_name: str
+    level: str
+    message: str
+    payload: Optional[dict] = None
+
+class PromGrafanaEvent(BaseModel):
+    alert_name: str
+    status: str
+    labels: dict
+    annotations: dict
+
 class NexusEvent(BaseModel):
     service: str
     level: str
@@ -448,6 +462,59 @@ def get_logs(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/v1/telemetry/universal")
+def ingest_universal_telemetry(event: UniversalEvent, current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_id = current_user.get("user_id")
+        timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+        
+        store_log(
+            tenant_id=tenant_id,
+            timestamp=timestamp,
+            log_data={
+                "provider": event.provider,
+                "resource_type": event.resource_type,
+                "service": event.resource_name,
+                "level": event.level,
+                "message": event.message
+            }
+        )
+        return {"status": "success", "message": "Universal telemetry ingested"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/integrations/prom-grafana")
+def ingest_prom_grafana(event: PromGrafanaEvent, current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_id = current_user.get("user_id")
+        timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+        
+        level = "ERROR" if event.status == "firing" else "INFO"
+        
+        store_log(
+            tenant_id=tenant_id,
+            timestamp=timestamp,
+            log_data={
+                "provider": "observability",
+                "resource_type": "prometheus",
+                "service": event.labels.get("service", "unknown"),
+                "level": level,
+                "message": event.annotations.get("description", event.alert_name)
+            }
+        )
+        return {"status": "success", "message": "Prometheus/Grafana alert processed"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/incidents/predictive")
+def get_predictive_incidents(current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_id = current_user.get("user_id")
+        risks = get_predictive_risks(tenant_id)
+        return risks
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # --- Incident Management ---
 @app.get("/api/v1/incidents")
 def get_incidents(current_user: dict = Depends(get_current_user)):
@@ -600,7 +667,10 @@ def get_integrations(current_user: dict = Depends(get_current_user)):
     try:
         tenant_id = current_user.get("user_id")
         if tenant_id not in integrations_store:
-            integrations_store[tenant_id] = {"github": False, "eks": False, "aks": False}
+            integrations_store[tenant_id] = {
+                "github": False, "eks": False, "aks": False,
+                "aws_ec2": False, "azure_vm": False, "azure_vmss": False, "azure_app_service": False
+            }
         return integrations_store[tenant_id]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -611,14 +681,15 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
     try:
         tenant_id = current_user.get("user_id")
         if tenant_id not in integrations_store:
-            integrations_store[tenant_id] = {"github": False, "eks": False, "aks": False}
+            integrations_store[tenant_id] = {
+                "github": False, "eks": False, "aks": False,
+                "aws_ec2": False, "azure_vm": False, "azure_vmss": False, "azure_app_service": False
+            }
         
         service_key = req.service.lower()
-        if service_key in integrations_store[tenant_id]:
-            integrations_store[tenant_id][service_key] = req.connected
-            return {"status": "success", "message": f"{req.service} connection status updated", "integrations": integrations_store[tenant_id]}
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported service integration: {req.service}")
+        # Allow dynamic addition of keys if needed, but primarily relying on initialized list
+        integrations_store[tenant_id][service_key] = req.connected
+        return {"status": "success", "message": f"{req.service} connection status updated", "integrations": integrations_store[tenant_id]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
