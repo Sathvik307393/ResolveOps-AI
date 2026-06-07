@@ -10,6 +10,7 @@ export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const [history, setHistory] = useState<string[]>([]);
+  const [integrations, setIntegrations] = useState({ github: false, eks: false, aks: false });
 
   const loadHistory = () => {
     const token = typeof window !== 'undefined' && localStorage.getItem("jwt_token");
@@ -34,8 +35,20 @@ export default function Sidebar() {
       .catch((err) => console.error("Failed to load sidebar chat history:", err));
   };
 
+  const loadIntegrations = () => {
+    const token = typeof window !== 'undefined' && localStorage.getItem("jwt_token");
+    if (!token) return;
+    
+    fetchApi("/api/v1/integrations")
+      .then((data: any) => {
+        if (data) setIntegrations(data);
+      })
+      .catch((err) => console.error("Failed to load integrations status:", err));
+  };
+
   useEffect(() => {
     loadHistory();
+    loadIntegrations();
 
     // Listen to custom updates dispatched from the chat panel
     window.addEventListener("chat-updated", loadHistory);
@@ -51,8 +64,8 @@ export default function Sidebar() {
 
   const navItems = [
     { name: "Dashboard", path: "/", icon: LayoutDashboard },
-    { name: "K8s Explorer", path: "/kubernetes", icon: Cpu },
-    { name: "GitHub Sync", path: "/github", icon: GitBranch },
+    ...(integrations.eks || integrations.aks ? [{ name: "K8s Explorer", path: "/kubernetes", icon: Cpu }] : []),
+    ...(integrations.github ? [{ name: "GitHub Sync", path: "/github", icon: GitBranch }] : []),
     { name: "AI Copilot", path: "/chat", icon: MessageSquareCode },
     { name: "Suggestions", path: "/suggestions", icon: Lightbulb },
     { name: "Analytics", path: "/analytics", icon: BarChart3 },
