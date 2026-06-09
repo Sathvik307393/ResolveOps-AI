@@ -1,8 +1,13 @@
 // src/lib/api.ts
-const API_BASE_URL = '/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export async function fetchApi(endpoint: string, options: RequestInit = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('jwt_token') : null;
+  
+  let path = endpoint;
+  if (path.startsWith('/api')) {
+    path = path.substring(4);
+  }
   
   const headers = new Headers(options.headers || {});
   headers.set('Content-Type', 'application/json');
@@ -11,7 +16,7 @@ export async function fetchApi(endpoint: string, options: RequestInit = {}) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
   });
