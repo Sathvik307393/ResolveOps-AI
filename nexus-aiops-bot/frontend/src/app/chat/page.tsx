@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
-import { MessageSquareCode, Send, Bot, User, Activity, Sun, Sunset, Moon, Paperclip } from "lucide-react";
+import { MessageSquareCode, Send, Bot, User, Activity, Sun, Sunset, Moon, Paperclip, Mic, Square, Trash2, Plus, FileText } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import dynamic from "next/dynamic";
@@ -125,15 +125,106 @@ export default function AICopilot() {
   const [fullName, setFullName] = useState("");
   const [imageFile, setImageFile] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Voice Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [voiceSending, setVoiceSending] = useState(false);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImageFile(reader.result as string);
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImageFile(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        // Universal File Handler (txt, json, log, etc.)
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const text = reader.result as string;
+          // Append contents to chat input automatically
+          setInput(prev => prev + `\n\n--- FILE: ${file.name} ---\n${text}\n---------------------\n`);
+        };
+        reader.readAsText(file);
+      }
+    }
+    // Reset file input
+    e.target.value = "";
+  };
+
+  const handleClearHistory = async () => {
+    if (!confirm("Are you sure you want to clear all chat history?")) return;
+    try {
+      await fetchApi("/api/chat/history", { method: "DELETE" });
+      setMessages([]);
+      window.dispatchEvent(new Event("chat-updated"));
+    } catch (e) {
+      console.error("Failed to delete history", e);
+    }
+  };
+
+  const startNewChat = () => {
+    setImageFile(null);
+    setInput("");
+    const greeting = getGreeting();
+    const welcome = `${greeting}! I am the Nexus AI Copilot. How can I assist you today?`;
+    setMessages([{ role: "assistant", content: welcome }]);
+  };
+
+  const toggleRecording = async () => {
+    if (isRecording) {
+      mediaRecorderRef.current?.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
-      reader.readAsDataURL(file);
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        // Close tracks
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Convert Blob to Base64
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = async () => {
+          const base64data = reader.result as string;
+          const pureBase64 = base64data.split(',')[1];
+          
+          setVoiceSending(true);
+          try {
+            const res = await fetchApi("/api/chat/voice", {
+              method: "POST",
+              body: JSON.stringify({ audio_base64: pureBase64 })
+            });
+            if (res.text) {
+              setInput(prev => prev + (prev ? " " : "") + res.text);
+            }
+          } catch (e) {
+            alert("Voice transcription failed. Please try again.");
+          } finally {
+            setVoiceSending(false);
+          }
+        };
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      alert("Microphone access denied or not available.");
     }
   };
 
@@ -262,14 +353,30 @@ export default function AICopilot() {
     <DashboardLayout>
       <div className="flex flex-col h-[calc(100vh-6rem)]">
         {/* Header */}
-        <div className="mb-6">
-          <h2 className="text-xl font-medium tracking-wide text-white flex items-center">
-            <MessageSquareCode className="mr-3 text-indigo-400" /> AI Copilot
-          </h2>
-          <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
-            <GreetingIcon size={14} className="text-amber-400" />
-            {getGreeting()}{fullName ? `, ${fullName.split(" ")[0]}` : ""} — powered by Amazon Bedrock · Claude 3 Haiku
-          </p>
+        <div className="mb-6 flex justify-between items-start">
+          <div>
+            <h2 className="text-xl font-medium tracking-wide text-white flex items-center">
+              <MessageSquareCode className="mr-3 text-indigo-400" /> AI Copilot
+            </h2>
+            <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
+              <GreetingIcon size={14} className="text-amber-400" />
+              {getGreeting()}{fullName ? `, ${fullName.split(" ")[0]}` : ""} — powered by Amazon Bedrock
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={startNewChat}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-md text-xs font-semibold transition-colors border border-indigo-500/20"
+            >
+              <Plus size={14} /> New Chat
+            </button>
+            <button 
+              onClick={handleClearHistory}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-md text-xs font-semibold transition-colors border border-rose-500/20"
+            >
+              <Trash2 size={14} /> Delete History
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 glass-panel rounded-xl flex flex-col overflow-hidden relative">
@@ -353,26 +460,37 @@ export default function AICopilot() {
               </div>
             )}
             <div className="relative flex items-center bg-[#0a0a0f] border border-slate-800 rounded-xl px-4 py-2 focus-within:border-indigo-500/50 transition-all">
-              <label className="mr-3 cursor-pointer text-slate-400 hover:text-white transition-colors">
+              <label className="mr-3 cursor-pointer text-slate-400 hover:text-white transition-colors" title="Upload Image or File (txt, log, json)">
                 <Paperclip size={18} />
                 <input 
                   type="file" 
-                  accept="image/*" 
+                  accept="image/*,.txt,.log,.json,.csv,.md" 
                   className="hidden" 
                   onChange={handleImageChange}
                 />
               </label>
+              
+              <button 
+                onClick={toggleRecording}
+                className={`mr-3 transition-colors ${isRecording ? 'text-rose-500 animate-pulse' : 'text-slate-400 hover:text-white'} ${voiceSending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title="Voice Record"
+                disabled={voiceSending}
+              >
+                {isRecording ? <Square size={18} /> : <Mic size={18} />}
+              </button>
+
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                placeholder="Ask anything or attach a diagram and type 'compile this to terraform'..."
+                placeholder={voiceSending ? "Transcribing voice..." : isRecording ? "Recording... Click stop when done." : "Ask anything, or attach logs/diagrams..."}
+                disabled={isRecording || voiceSending}
                 className="flex-1 bg-transparent text-white focus:outline-none py-2 pr-12 text-sm"
               />
               <button
                 onClick={handleSend}
-                disabled={sending}
+                disabled={sending || voiceSending || isRecording}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 hover:text-indigo-300 disabled:opacity-50 transition-colors cursor-pointer"
               >
                 <Send size={18} />

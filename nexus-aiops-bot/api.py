@@ -18,7 +18,7 @@ import requests
 from database import (
     init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table, get_deployments_table,
     store_log, get_logs as db_get_logs, update_reliability_score, get_reliability_score, store_deployment, get_latest_deployment,
-    store_chat_message, get_chat_history, get_predictive_risks
+    store_chat_message, get_chat_history, delete_chat_history, get_predictive_risks
 )
 import notifications
 from predictive_engine import PredictiveEngine
@@ -278,6 +278,66 @@ def get_chat_history_endpoint(current_user: dict = Depends(get_current_user)):
     try:
         tenant_id = current_user.get("user_id")
         return get_chat_history(tenant_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/chat/history")
+def delete_chat_history_endpoint(current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_id = current_user.get("user_id")
+        delete_chat_history(tenant_id)
+        return {"status": "success", "message": "Chat history deleted."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class VoiceRequest(BaseModel):
+    audio_base64: str
+
+@app.post("/api/chat/voice")
+async def chat_voice_endpoint(request: VoiceRequest, current_user: dict = Depends(get_current_user)):
+    try:
+        import speech_recognition as sr
+        import base64
+        import tempfile
+        import os
+        import subprocess
+
+        # Decode base64
+        audio_data = base64.b64decode(request.audio_base64)
+        
+        # Write to temp file (could be webm)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_in:
+            temp_in.write(audio_data)
+            temp_in_path = temp_in.name
+            
+        temp_out_path = temp_in_path.replace(".webm", ".wav")
+        
+        # Use ffmpeg to convert to wav (SpeechRecognition requires WAV)
+        try:
+            subprocess.run(["ffmpeg", "-y", "-i", temp_in_path, temp_out_path], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            # Fallback if ffmpeg isn't installed: try reading directly (works if browser sent WAV natively)
+            import shutil
+            shutil.copy(temp_in_path, temp_out_path)
+
+        recognizer = sr.Recognizer()
+        with sr.AudioFile(temp_out_path) as source:
+            audio = recognizer.record(source)
+            
+        text = recognizer.recognize_google(audio)
+        
+        # Cleanup
+        try:
+            os.remove(temp_in_path)
+            os.remove(temp_out_path)
+        except:
+            pass
+            
+        return {"text": text}
+    except sr.UnknownValueError:
+        raise HTTPException(status_code=400, detail="Could not understand audio")
+    except sr.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Speech recognition service error: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

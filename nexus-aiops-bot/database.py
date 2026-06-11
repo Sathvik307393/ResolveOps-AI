@@ -348,6 +348,39 @@ def get_chat_history(tenant_id: str, limit: int = 50) -> list:
         print(f"Local Chat History read failed: {local_ex}")
         return []
 
+def delete_chat_history(tenant_id: str) -> bool:
+    """Deletes all message logs for a given tenant."""
+    try:
+        table = get_chat_history_table()
+        # Query to get all items
+        response = table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('tenant_id').eq(tenant_id)
+        )
+        items = response.get('Items', [])
+        with table.batch_writer() as batch:
+            for item in items:
+                batch.delete_item(
+                    Key={
+                        'tenant_id': item['tenant_id'],
+                        'timestamp': item['timestamp']
+                    }
+                )
+    except Exception as e:
+        print(f"DynamoDB Chat History delete failed: {e}. Attempting local file.")
+        
+    try:
+        local_path = "local_chat_history.json"
+        if os.path.exists(local_path):
+            with open(local_path, "r") as f:
+                history = json.load(f)
+            history = [msg for msg in history if msg.get('tenant_id') != tenant_id]
+            with open(local_path, "w") as f:
+                json.dump(history, f, indent=2)
+        return True
+    except Exception as local_ex:
+        print(f"Local Chat History delete failed: {local_ex}")
+        return False
+
 # --- Predictive Risks Management ---
 def store_predictive_risk(tenant_id: str, risk_data: dict) -> bool:
     timestamp = datetime.datetime.utcnow().isoformat() + "Z"
