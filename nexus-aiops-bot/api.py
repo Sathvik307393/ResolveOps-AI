@@ -643,7 +643,38 @@ def get_github_deployments(current_user: dict = Depends(get_current_user)):
             ScanIndexForward=False,
             Limit=50
         )
-        return response.get('Items', [])
+        db_items = response.get('Items', [])
+        
+        # Merge live deployments from PAT if available
+        tenant_data = integrations_store.get(tenant_id, {})
+        pat = tenant_data.get("credentials", {}).get("github", {}).get("pat")
+        
+        if pat:
+            headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+            repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=3", headers=headers)
+            if repos_res.status_code == 200:
+                repos = repos_res.json()
+                for repo in repos:
+                    repo_name = repo.get("full_name")
+                    if not repo_name: continue
+                    commits_url = f"https://api.github.com/repos/{repo_name}/commits?per_page=1"
+                    commits_res = requests.get(commits_url, headers=headers)
+                    if commits_res.status_code == 200:
+                        commits = commits_res.json()
+                        if commits and isinstance(commits, list) and len(commits) > 0:
+                            commit = commits[0]
+                            db_items.append({
+                                "commit_sha": commit.get("sha", ""),
+                                "commit_msg": commit.get("commit", {}).get("message", "Commit"),
+                                "author": commit.get("commit", {}).get("author", {}).get("name", "Unknown"),
+                                "repository": repo_name,
+                                "timestamp": commit.get("commit", {}).get("author", {}).get("date", ""),
+                                "workflow_run_id": "PAT_SYNC"
+                            })
+                            
+        # Sort combined items by timestamp descending
+        db_items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        return db_items
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
