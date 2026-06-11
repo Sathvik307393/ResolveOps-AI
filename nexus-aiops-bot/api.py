@@ -651,7 +651,7 @@ def get_github_deployments(current_user: dict = Depends(get_current_user)):
         
         if pat:
             headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
-            repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=3", headers=headers)
+            repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=30", headers=headers)
             if repos_res.status_code == 200:
                 repos = repos_res.json()
                 for repo in repos:
