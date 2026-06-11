@@ -22,6 +22,10 @@ export default function GitHubDeployments() {
   const [loading, setLoading] = useState(true);
   const [deployments, setDeployments] = useState<DeploymentEvent[]>([]);
   const [diagnoseModal, setDiagnoseModal] = useState<{isOpen: boolean, data?: any, loading?: boolean}>({isOpen: false});
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const handleDiagnose = async (repository: string, workflow_run_id: string) => {
     setDiagnoseModal({ isOpen: true, loading: true });
@@ -123,24 +127,39 @@ export default function GitHubDeployments() {
               </div>
               
               {/* Data Rows */}
-              <div className="divide-y divide-border overflow-y-auto max-h-[60vh] custom-scrollbar">
-                {deployments.map((deploy, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-white/[0.02] transition-colors group cursor-default">
-                    {/* Repo */}
-                    <div className="col-span-3 font-semibold text-sm text-slate-200 truncate pr-2 group-hover:text-primary transition-colors">
-                      {deploy.repository}
-                    </div>
-                    
-                    {/* Commit SHA & Author */}
-                    <div className="col-span-2 flex flex-col justify-center">
-                      <span className="font-mono text-xs text-slate-400 group-hover:text-primary transition-colors">
-                        {deploy.commit_sha ? deploy.commit_sha.substring(0, 7) : "unknown"}
-                      </span>
-                      <div className="flex items-center space-x-1.5 mt-1 text-[10px] text-slate-500">
-                        <User size={10} />
-                        <span className="truncate">{deploy.author}</span>
+              <div className="divide-y divide-border bg-background/20">
+                {deployments.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((deploy, i) => {
+                  const repoParts = deploy.repository.split('/');
+                  const repoOwner = repoParts[0];
+                  const repoName = repoParts[1] || deploy.repository;
+                  
+                  return (
+                    <div key={i} className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-white/[0.04] transition-colors group cursor-default">
+                      {/* Repo */}
+                      <div className="col-span-3 flex flex-col justify-center truncate pr-2">
+                        <a 
+                          href={`https://github.com/${deploy.repository}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="font-semibold text-sm text-slate-200 group-hover:text-primary transition-colors hover:underline"
+                        >
+                          {repoName}
+                        </a>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
+                          {repoOwner}
+                        </span>
                       </div>
-                    </div>
+                      
+                      {/* Commit SHA & Author */}
+                      <div className="col-span-2 flex flex-col justify-center">
+                        <span className="font-mono text-xs text-slate-400 group-hover:text-primary transition-colors">
+                          {deploy.commit_sha ? deploy.commit_sha.substring(0, 7) : "unknown"}
+                        </span>
+                        <div className="flex items-center space-x-1.5 mt-1 text-[10px] text-slate-500">
+                          <User size={10} />
+                          <span className="truncate" title="Commit Author">{deploy.author}</span>
+                        </div>
+                      </div>
                     
                     {/* Message */}
                     <div className="col-span-3 text-xs text-slate-300 truncate pr-4">
@@ -179,8 +198,34 @@ export default function GitHubDeployments() {
                       {deploy.timestamp ? new Date(deploy.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : "just now"}
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
+              
+              {/* Pagination Controls */}
+              {deployments.length > itemsPerPage && (
+                <div className="p-4 border-t border-border bg-black/10 flex items-center justify-between">
+                  <span className="text-xs text-slate-500 font-medium">
+                    Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, deployments.length)} of {deployments.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 rounded bg-card border border-border text-xs font-semibold text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs text-slate-400 font-mono px-2">Page {currentPage}</span>
+                    <button 
+                      onClick={() => setCurrentPage(p => (p * itemsPerPage < deployments.length ? p + 1 : p))}
+                      disabled={currentPage * itemsPerPage >= deployments.length}
+                      className="px-3 py-1.5 rounded bg-card border border-border text-xs font-semibold text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
