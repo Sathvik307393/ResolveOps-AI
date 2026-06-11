@@ -662,8 +662,8 @@ def get_github_deployments(current_user: dict = Depends(get_current_user)):
         
         if pat:
             headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
-            # Only fetch top 5 repos to avoid strict rate limits when auto-polling
-            repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=5", headers=headers)
+            # Only fetch top 5 owned repos to avoid strict rate limits when auto-polling
+            repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=5&affiliation=owner", headers=headers)
             if repos_res.status_code == 200:
                 repos = repos_res.json()
                 for repo in repos:
