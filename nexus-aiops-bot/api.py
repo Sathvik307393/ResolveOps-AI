@@ -701,10 +701,20 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
         
         if pat:
             headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
-            # Fetch up to 100 repos without affiliation filter to get all orgs and collaborators
-            repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=100", headers=headers)
-            if repos_res.status_code == 200:
-                repos = repos_res.json()
+            # Fetch up to 50 owned repos and up to 50 other repos to guarantee PAT's own repos are always visible
+            repos = []
+            
+            # 1. Owned Repositories
+            owner_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50&affiliation=owner", headers=headers)
+            if owner_res.status_code == 200:
+                repos.extend(owner_res.json())
+                
+            # 2. Organization & Collaborator Repositories
+            other_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50&affiliation=collaborator,organization_member", headers=headers)
+            if other_res.status_code == 200:
+                repos.extend(other_res.json())
+                
+            if repos:
                 for repo in repos:
                     repo_name = repo.get("full_name")
                     if not repo_name: continue
