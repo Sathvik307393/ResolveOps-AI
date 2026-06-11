@@ -49,10 +49,12 @@ function findExcalidrawCode(children: any): { codeText: string } | null {
   }
   if (children.props) {
     const className = children.props.className || "";
-    if (typeof className === "string" && className.includes("language-excalidraw")) {
+    if (typeof className === "string" && (className.includes("language-excalidraw") || className.includes("language-json"))) {
       const childrenVal = children.props.children;
       const codeText = Array.isArray(childrenVal) ? childrenVal.join("") : String(childrenVal || "");
-      return { codeText };
+      if (className.includes("language-excalidraw") || codeText.includes('"type": "excalidraw"')) {
+        return { codeText };
+      }
     }
     if (children.props.children) {
       return findExcalidrawCode(children.props.children);
@@ -372,7 +374,7 @@ export default function AICopilot() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col h-[calc(100vh-6rem)]">
+      <div className="flex flex-col h-[calc(100vh-4rem)]">
         {/* Header */}
         <div className="mb-6 flex justify-between items-start">
           <div>
