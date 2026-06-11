@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
-import { GitBranch, User, Clock, CheckCircle, XCircle, AlertCircle, Activity } from "lucide-react";
+import { GitBranch, User, Clock, CheckCircle, XCircle, AlertCircle, Activity, RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
 interface DeploymentEvent {
@@ -20,19 +20,23 @@ export default function GitHubDeployments() {
   const [loading, setLoading] = useState(true);
   const [deployments, setDeployments] = useState<DeploymentEvent[]>([]);
 
-  useEffect(() => {
-    const token = localStorage.getItem("jwt_token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-
+  const fetchData = () => {
+    setLoading(true);
     fetchApi("/api/v1/github/deployments")
       .then((data) => {
         setDeployments(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    const token = localStorage.getItem("jwt_token");
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+    fetchData();
   }, [router]);
 
   if (loading) {
@@ -47,11 +51,19 @@ export default function GitHubDeployments() {
     <DashboardLayout>
       <div className="flex flex-col h-full space-y-6 font-sans">
         {/* Header */}
-        <div>
-          <h2 className="text-xl font-bold tracking-wide text-white">GitHub Deployment Sync</h2>
-          <p className="text-sm text-slate-500 mt-1">
-            Real-time tracking of runner builds, production releases, and code changes mapped to telemetry timelines.
-          </p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h2 className="text-xl font-bold tracking-wide text-white">GitHub Deployment Sync</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Real-time tracking of runner builds, production releases, and code changes mapped to telemetry timelines.
+            </p>
+          </div>
+          <button
+            onClick={fetchData}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            <RefreshCw size={14} /> Refresh Data
+          </button>
         </div>
 
         {/* Timeline Table */}
