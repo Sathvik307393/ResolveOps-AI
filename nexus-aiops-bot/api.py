@@ -633,6 +633,7 @@ def generate_incident_rca(incident_id: str, current_user: dict = Depends(get_cur
         raise HTTPException(status_code=500, detail=str(e))
 
 github_deployments_cache = {}
+github_repo_workflow_cache = {}
 
 @app.get("/api/v1/github/deployments")
 def get_github_deployments(current_user: dict = Depends(get_current_user)):
@@ -662,22 +663,34 @@ def get_github_deployments(current_user: dict = Depends(get_current_user)):
         
         if pat:
             headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
-            # Only fetch top 5 owned repos to avoid strict rate limits when auto-polling
-            repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=5&affiliation=owner", headers=headers)
+            # Fetch 30 repos without affiliation filter to get all orgs and collaborators
+            repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=30", headers=headers)
             if repos_res.status_code == 200:
                 repos = repos_res.json()
                 for repo in repos:
                     repo_name = repo.get("full_name")
                     if not repo_name: continue
-                    # Fetch latest workflow run for accurate status
+                    
+                    repo_updated_at = repo.get("updated_at", "")
+                    cache_key_repo = f"{tenant_id}_{repo_name}"
+                    
+                    # Check smart per-repo cache
+                    if cache_key_repo in github_repo_workflow_cache:
+                        cached_entry = github_repo_workflow_cache[cache_key_repo]
+                        if cached_entry["updated_at"] == repo_updated_at:
+                            db_items.append(cached_entry["db_item"])
+                            continue
+                            
+                    # Fetch latest workflow run if cache miss or repo was updated
                     runs_url = f"https://api.github.com/repos/{repo_name}/actions/runs?per_page=1"
                     runs_res = requests.get(runs_url, headers=headers)
+                    db_item = None
                     if runs_res.status_code == 200:
                         runs_data = runs_res.json()
                         runs = runs_data.get("workflow_runs", [])
                         if runs:
                             run = runs[0]
-                            db_items.append({
+                            db_item = {
                                 "commit_sha": run.get("head_sha", ""),
                                 "commit_msg": run.get("head_commit", {}).get("message", "Commit"),
                                 "author": run.get("head_commit", {}).get("author", {}).get("name", "Unknown"),
@@ -686,7 +699,7 @@ def get_github_deployments(current_user: dict = Depends(get_current_user)):
                                 "workflow_run_id": str(run.get("id", "")),
                                 "status": run.get("status"),
                                 "conclusion": run.get("conclusion")
-                            })
+                            }
                         else:
                             # Fallback to commit if no workflow runs exist
                             commits_url = f"https://api.github.com/repos/{repo_name}/commits?per_page=1"
@@ -695,7 +708,7 @@ def get_github_deployments(current_user: dict = Depends(get_current_user)):
                                 commits = commits_res.json()
                                 if commits and isinstance(commits, list) and len(commits) > 0:
                                     commit = commits[0]
-                                    db_items.append({
+                                    db_item = {
                                         "commit_sha": commit.get("sha", ""),
                                         "commit_msg": commit.get("commit", {}).get("message", "Commit"),
                                         "author": commit.get("commit", {}).get("author", {}).get("name", "Unknown"),
@@ -704,15 +717,82 @@ def get_github_deployments(current_user: dict = Depends(get_current_user)):
                                         "workflow_run_id": "PAT_SYNC",
                                         "status": "completed",
                                         "conclusion": "success"
-                                    })
+                                    }
+                    
+                    if db_item:
+                        github_repo_workflow_cache[cache_key_repo] = {
+                            "updated_at": repo_updated_at,
+                            "db_item": db_item
+                        }
+                        db_items.append(db_item)
                             
         # Sort combined items by timestamp descending
         db_items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
         
-        # Save to cache
+        # Save to main 10s cache
         github_deployments_cache[cache_key] = {'time': current_time, 'data': db_items}
         
         return db_items
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class DiagnoseRequest(BaseModel):
+    repository: str
+    workflow_run_id: str
+
+@app.post("/api/v1/github/diagnose")
+def diagnose_github_pipeline(req: DiagnoseRequest, current_user: dict = Depends(get_current_user)):
+    """Fetches failed workflow logs and generates an AI diagnosis."""
+    try:
+        tenant_id = current_user.get("user_id")
+        tenant_data = integrations_store.get(tenant_id, {})
+        pat = tenant_data.get("credentials", {}).get("github", {}).get("pat")
+        
+        if not pat:
+            raise HTTPException(status_code=400, detail="GitHub PAT not found")
+            
+        headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+        
+        # 1. Get Jobs for the Workflow Run
+        jobs_url = f"https://api.github.com/repos/{req.repository}/actions/runs/{req.workflow_run_id}/jobs"
+        jobs_res = requests.get(jobs_url, headers=headers)
+        if jobs_res.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch jobs for workflow")
+            
+        jobs = jobs_res.json().get("jobs", [])
+        failed_job = next((job for job in jobs if job.get("conclusion") == "failure"), None)
+        
+        if not failed_job:
+            return {"diagnosis": "No failed jobs found in this workflow run."}
+            
+        job_id = failed_job["id"]
+        
+        # 2. Get Logs for the failed Job
+        logs_url = f"https://api.github.com/repos/{req.repository}/actions/jobs/{job_id}/logs"
+        logs_res = requests.get(logs_url, headers=headers)
+        
+        if logs_res.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to download job logs. Ensure PAT has 'actions:read' permission.")
+            
+        raw_logs = logs_res.text
+        
+        # 3. Analyze Logs with RAG Engine
+        # Limit logs to last 3000 chars to avoid token limits
+        log_snippet = raw_logs[-3000:]
+        
+        diagnosis_query = f"The GitHub Actions pipeline '{failed_job['name']}' in repository '{req.repository}' failed. Analyze these logs and predict the exact root cause and an accurate solution:\n\n{log_snippet}"
+        
+        ai_result = engine.run_query(diagnosis_query, time_window_mins=60)
+        diagnosis = ai_result.get("answer", "Analysis failed.")
+        
+        return {
+            "status": "success",
+            "job_name": failed_job["name"],
+            "diagnosis": diagnosis,
+            "raw_logs": log_snippet
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
