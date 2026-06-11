@@ -121,6 +121,7 @@ export default function AICopilot() {
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [fullName, setFullName] = useState("");
   const [imageFile, setImageFile] = useState<string | null>(null);
@@ -157,10 +158,14 @@ export default function AICopilot() {
   };
 
   const handleClearHistory = async () => {
-    if (!confirm("Are you sure you want to clear all chat history?")) return;
+    if (!confirm(sessionId ? "Are you sure you want to delete this chat session?" : "Are you sure you want to clear all chat history?")) return;
     try {
-      await fetchApi("/api/chat/history", { method: "DELETE" });
+      await fetchApi(`/api/chat/history${sessionId ? `?session_id=${sessionId}` : ''}`, { method: "DELETE" });
       setMessages([]);
+      if (sessionId) {
+        setSessionId(null);
+        router.replace("/chat");
+      }
       window.dispatchEvent(new Event("chat-updated"));
     } catch (e) {
       console.error("Failed to delete history", e);
@@ -170,6 +175,8 @@ export default function AICopilot() {
   const startNewChat = () => {
     setImageFile(null);
     setInput("");
+    setSessionId(null);
+    router.replace("/chat");
     const greeting = getGreeting();
     const welcome = `${greeting}! I am the Nexus AI Copilot. How can I assist you today?`;
     setMessages([{ role: "assistant", content: welcome }]);
@@ -240,8 +247,25 @@ export default function AICopilot() {
     const name = payload.full_name || payload.email || "";
     setFullName(name);
 
-    // Fetch message history from API
-    fetchApi("/chat/history")
+    let sid = null;
+    if (typeof window !== 'undefined') {
+      sid = new URLSearchParams(window.location.search).get("session_id");
+      if (sid) setSessionId(sid);
+    }
+
+    if (!sid) {
+      const firstName = name.split(" ")[0];
+      const greeting = getGreeting();
+      const welcome = firstName
+        ? `${greeting}, ${firstName}! 👋 I am the Nexus AI Copilot. I have full visibility into your active incidents and service logs. How can I assist you today?`
+        : `${greeting}! I am the Nexus AI Copilot. I have full visibility into your active incidents and service logs. How can I assist you today?`;
+      setMessages([{ role: "assistant", content: welcome }]);
+      setLoading(false);
+      return;
+    }
+
+    // Fetch message history from API for the specific session
+    fetchApi(`/api/chat/history?session_id=${sid}`)
       .then((history: any) => {
         if (Array.isArray(history) && history.length > 0) {
           const mapped = history.map((msg: any) => {
@@ -256,7 +280,6 @@ export default function AICopilot() {
           });
           setMessages(mapped);
         } else {
-          // Fallback to default greeting if history is empty
           const firstName = name.split(" ")[0];
           const greeting = getGreeting();
           const welcome = firstName
@@ -264,27 +287,16 @@ export default function AICopilot() {
             : `${greeting}! I am the Nexus AI Copilot. I have full visibility into your active incidents and service logs. How can I assist you today?`;
           setMessages([{ role: "assistant", content: welcome }]);
         }
-
-        // Process search parameter 'q' on initial load
-        if (typeof window !== 'undefined') {
-          const queryParam = new URLSearchParams(window.location.search).get("q");
-          if (queryParam) {
-            setInput(queryParam);
-          }
-        }
       })
       .catch((err) => {
         console.error("Failed to load chat history:", err);
-        const greeting = getGreeting();
-        const welcome = `${greeting}! I am the Nexus AI Copilot. I have full visibility into your active incidents and service logs. How can I assist you today?`;
-        setMessages([{ role: "assistant", content: welcome }]);
       })
       .finally(() => {
         setLoading(false);
       });
-  }, [router]);
+  }, [pathname, router]);
 
-  // Listen to URL search parameter updates (e.g. when clicking sidebar queries while on the chat page)
+  // Listen to URL search parameter updates for switching sessions cleanly
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const queryParam = new URLSearchParams(window.location.search).get("q");
@@ -292,7 +304,7 @@ export default function AICopilot() {
         setInput(queryParam);
       }
     }
-  }, [pathname]); // pathname or trigger from URL changes
+  }, [pathname]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -317,15 +329,24 @@ export default function AICopilot() {
     setImageFile(null);
 
     try {
-      const data = await fetchApi("/chat", {
+      const payload: any = { 
+        message: payloadQuery, 
+        image_base64: currentImage 
+      };
+      if (sessionId) {
+        payload.session_id = sessionId;
+      }
+
+      const data = await fetchApi("/api/chat", {
         method: "POST",
-        body: JSON.stringify({ 
-          query: payloadQuery, 
-          time_window_mins: 60,
-          image_base64: currentImage 
-        }),
+        body: JSON.stringify(payload),
       });
       setMessages((prev) => [...prev, { role: "assistant", content: data.answer }]);
+      
+      if (data.session_id && !sessionId) {
+        setSessionId(data.session_id);
+        router.replace(`/chat?session_id=${data.session_id}`);
+      }
       
       // Dispatch custom event to notify sidebar of updates
       window.dispatchEvent(new Event("chat-updated"));

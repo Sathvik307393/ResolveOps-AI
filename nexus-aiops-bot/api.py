@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import uvicorn
 from rag.rag_engine import LogRageEngine
-from typing import Optional, List
+from typing import Optional, List, Dict
 import jwt
 import datetime
 import hashlib
@@ -18,7 +18,7 @@ import requests
 from database import (
     init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table, get_deployments_table,
     store_log, get_logs as db_get_logs, update_reliability_score, get_reliability_score, store_deployment, get_latest_deployment,
-    store_chat_message, get_chat_history, delete_chat_history, get_predictive_risks
+    store_chat_message, get_chat_history, delete_chat_history, get_predictive_risks, get_chat_sessions
 )
 import notifications
 from predictive_engine import PredictiveEngine
@@ -66,13 +66,13 @@ class OTPRequest(BaseModel):
 otp_store: dict = {}
 
 class ChatRequest(BaseModel):
-    query: str
-    time_window_mins: Optional[int] = 30
+    message: str
     image_base64: Optional[str] = None
+    session_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     answer: str
-    citations: list
+    session_id: str
 
 class ApiKeyResponse(BaseModel):
     key: str
@@ -242,18 +242,20 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
 async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     try:
         tenant_id = current_user.get("user_id")
+        session_id = request.session_id if request.session_id else str(uuid.uuid4())
         
-        # Save user message to history
+        # 1. Store User Message
         store_chat_message(
             tenant_id=tenant_id,
+            session_id=session_id,
             role="user",
-            content=request.query,
+            content=request.message,
             image_base64=request.image_base64
         )
         
         result = engine.run_query(
-            query=request.query,
-            time_window_mins=request.time_window_mins,
+            query=request.message,
+            time_window_mins=30,
             image_base64=request.image_base64
         )
         
@@ -262,30 +264,39 @@ async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(get_c
         # Save assistant response to history
         store_chat_message(
             tenant_id=tenant_id,
+            session_id=session_id,
             role="assistant",
             content=answer
         )
         
         return ChatResponse(
             answer=answer,
-            citations=result.get("citations", [])
+            session_id=session_id
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/chat/history")
-def get_chat_history_endpoint(current_user: dict = Depends(get_current_user)):
+def get_chat_history_endpoint(session_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     try:
         tenant_id = current_user.get("user_id")
-        return get_chat_history(tenant_id)
+        return get_chat_history(tenant_id, session_id=session_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chat/sessions")
+def get_chat_sessions_endpoint(current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_id = current_user.get("user_id")
+        return get_chat_sessions(tenant_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/chat/history")
-def delete_chat_history_endpoint(current_user: dict = Depends(get_current_user)):
+def delete_chat_history_endpoint(session_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     try:
         tenant_id = current_user.get("user_id")
-        delete_chat_history(tenant_id)
+        delete_chat_history(tenant_id, session_id=session_id)
         return {"status": "success", "message": "Chat history deleted."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

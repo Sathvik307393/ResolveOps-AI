@@ -9,7 +9,7 @@ import { fetchApi } from "@/lib/api";
 export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
-  const [history, setHistory] = useState<string[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [integrations, setIntegrations] = useState<any>({ github: false, eks: false, aks: false, aws_ec2: false, azure_vm: false, azure_vmss: false, azure_app_service: false });
 
@@ -17,23 +17,13 @@ export default function Sidebar() {
     const token = typeof window !== 'undefined' && localStorage.getItem("jwt_token");
     if (!token) return;
     
-    fetchApi("/chat/history")
+    fetchApi("/api/chat/sessions")
       .then((res: any) => {
         if (Array.isArray(res)) {
-          const userMessages = res.filter((m: any) => m.role === "user");
-          const uniqueQueries: string[] = [];
-          const seen = new Set<string>();
-          for (let i = userMessages.length - 1; i >= 0; i--) {
-            const query = userMessages[i].content;
-            if (query && !seen.has(query)) {
-              seen.add(query);
-              uniqueQueries.push(query);
-            }
-          }
-          setHistory(uniqueQueries.slice(0, 5));
+          setSessions(res);
         }
       })
-      .catch((err) => console.error("Failed to load sidebar chat history:", err));
+      .catch((err) => console.error("Failed to load sidebar chat sessions:", err));
   };
 
   const loadIntegrations = () => {
@@ -124,18 +114,27 @@ export default function Sidebar() {
         })}
 
         {/* Recent Chats Section */}
-        {!isCollapsed && history.length > 0 && (
+        {!isCollapsed && sessions.length > 0 && (
           <div className="pt-4 border-t border-border/50 mt-4 px-2 animate-in fade-in duration-300">
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">Recent Queries</p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">Recent Chats</p>
             <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-              {history.map((query, index) => (
-                <Link key={index} href={`/chat?q=${encodeURIComponent(query)}`}>
-                  <div className="w-full flex items-center space-x-2 px-2 py-1.5 rounded text-xs text-slate-400 hover:text-primary hover:bg-white/5 transition-all truncate cursor-pointer">
-                    <MessageSquare size={12} className="shrink-0 text-slate-500" />
-                    <span className="truncate" title={query}>{query}</span>
-                  </div>
-                </Link>
-              ))}
+              {sessions.map((session, index) => {
+                const dateObj = new Date(session.timestamp);
+                const isToday = new Date().toDateString() === dateObj.toDateString();
+                const dateLabel = isToday ? "Today" : dateObj.toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
+                
+                return (
+                  <Link key={session.session_id} href={`/chat?session_id=${session.session_id}`}>
+                    <div className="w-full flex items-center space-x-2 px-2 py-2 rounded text-xs text-slate-400 hover:text-primary hover:bg-white/5 transition-all group">
+                      <MessageSquare size={12} className="shrink-0 text-slate-500 group-hover:text-primary" />
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="truncate font-medium text-slate-300" title={session.title}>{session.title}</div>
+                        <div className="text-[9px] text-slate-500 mt-0.5">{dateLabel}</div>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           </div>
         )}
