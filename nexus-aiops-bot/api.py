@@ -1031,12 +1031,29 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
         service_key = req.service.lower()
         integrations_store[tenant_id][service_key] = req.connected
         
-        if req.credentials:
+        username = None
+        if req.connected and req.credentials:
             if "credentials" not in integrations_store[tenant_id]:
                 integrations_store[tenant_id]["credentials"] = {}
             integrations_store[tenant_id]["credentials"][service_key] = req.credentials
             
-        return {"status": "success", "message": f"{req.service} connection status updated", "integrations": integrations_store[tenant_id]}
+            # Fetch username for github if pat is provided
+            if service_key == "github" and "pat" in req.credentials:
+                try:
+                    import requests
+                    pat = req.credentials["pat"]
+                    res = requests.get("https://api.github.com/user", headers={"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"})
+                    if res.status_code == 200:
+                        username = res.json().get("login")
+                except:
+                    pass
+            
+        return {
+            "status": "success", 
+            "message": f"{req.service} connection status updated", 
+            "integrations": integrations_store[tenant_id],
+            "username": username
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

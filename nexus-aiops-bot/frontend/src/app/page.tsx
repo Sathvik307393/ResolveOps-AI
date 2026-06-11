@@ -242,7 +242,7 @@ app.add_middleware(
              </div>
              <div className="flex items-center justify-between mt-2">
                <div className="relative w-32 h-20 flex flex-col items-center justify-end overflow-hidden">
-                 <div className={`absolute top-0 w-32 h-32 rounded-full border-8 border-${scoreColorClass}/20 border-t-${scoreColorClass} border-l-${scoreColorClass} transform rotate-45 glow-green transition-all`}></div>
+                  <div className={`absolute top-0 w-32 h-32 rounded-full border-8 border-${scoreColorClass}/20 border-t-${scoreColorClass} border-l-${scoreColorClass} transform rotate-45 glow-green`}></div>
                  <div className="text-center z-10 pb-2">
                    <div className="text-3xl font-bold text-white">{reliabilityScore.toFixed(1)}%</div>
                    <div className={`text-[10px] font-bold text-${scoreColorClass} tracking-widest mt-1`}>
@@ -252,9 +252,9 @@ app.add_middleware(
                </div>
                <div className="flex-1 ml-4 h-12 flex items-end justify-between space-x-1">
                  <div className="w-full h-full relative">
-                   <svg viewBox="0 0 100 40" className="w-full h-full stroke-emerald-400 fill-none" strokeWidth="2">
-                     <path d={generateSparklinePath(logs)} className="drop-shadow-[0_0_8px_rgba(16,185,129,0.5)] transition-all duration-1000" />
-                   </svg>
+                    <svg viewBox="0 0 100 40" className="w-full h-full stroke-emerald-400 fill-none" strokeWidth="2">
+                      <path d={generateSparklinePath(logs)} className="drop-shadow-[0_0_8px_rgba(16,185,129,0.5)] opacity-90 transition-opacity" />
+                    </svg>
                  </div>
                </div>
              </div>
@@ -264,7 +264,7 @@ app.add_middleware(
         {/* ─── Service Cards Grid Section ────────────────────────────────────────── */}
         <h3 className="text-sm font-semibold tracking-wider text-slate-400 uppercase mb-4">Active System Services</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {serviceCards.map((service) => {
+          {serviceCards.map((service, index) => {
             const Icon = service.icon;
             const statusColor = service.status === "CRITICAL" ? "border-rose-500" : service.status === "WARNING" ? "border-amber-500" : "border-slate-800";
             const statusBadge = service.status === "CRITICAL" ? "bg-rose-500/20 text-rose-400" : service.status === "WARNING" ? "bg-amber-500/20 text-amber-400" : "bg-emerald-500/20 text-emerald-400";
@@ -272,7 +272,8 @@ app.add_middleware(
               <div
                 key={service.id}
                 onClick={() => setSelectedService(service)}
-                className={`glass-panel border ${statusColor} rounded-xl p-5 cursor-pointer hover:bg-white/5 transition-all relative overflow-hidden group`}
+                className={`glass-panel border ${statusColor} rounded-xl p-5 cursor-pointer hover:bg-white/5 transition-opacity duration-300 relative overflow-hidden group animate-in fade-in slide-in-from-bottom-4`}
+                style={{ animationDelay: `${index * 100}ms`, animationFillMode: 'both' }}
               >
                 <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-indigo-500/0 via-indigo-500 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div className="flex justify-between items-start mb-4">

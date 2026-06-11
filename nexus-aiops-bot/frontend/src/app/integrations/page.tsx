@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
-import { GitBranch, Cpu, Database, Activity, Key, Server, Layers, AppWindow, Eye, EyeOff } from "lucide-react";
+import { GitBranch, Cpu, Database, Activity, Key, Server, Layers, AppWindow, Eye, EyeOff, CheckCircle } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
 interface IntegrationsState {
@@ -33,6 +33,12 @@ export default function IntegrationsManager() {
   const [azureSecret, setAzureSecret] = useState("");
   const [showGithubPat, setShowGithubPat] = useState(false);
   const [showAzureSecret, setShowAzureSecret] = useState(false);
+  const [successToast, setSuccessToast] = useState<{show: boolean, title: string, message: string}>({show: false, title: "", message: ""});
+  
+  const showToast = (title: string, message: string) => {
+    setSuccessToast({ show: true, title, message });
+    setTimeout(() => setSuccessToast({ show: false, title: "", message: "" }), 4000);
+  };
   const loadIntegrations = () => {
     fetchApi("/api/v1/integrations")
       .then((data) => {
@@ -63,6 +69,11 @@ export default function IntegrationsManager() {
       });
       if (data?.integrations) {
         setStatus(data.integrations);
+        if (isConnect) {
+          const serviceName = service.toUpperCase().replace("_", " ");
+          const msg = data.username ? `Connected to GitHub as ${data.username}` : `Successfully connected to ${serviceName}`;
+          showToast("Connection Successful", msg);
+        }
       }
       setActiveModal(null);
       // Reset inputs
@@ -136,7 +147,19 @@ export default function IntegrationsManager() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col h-full space-y-6 font-sans pb-10">
+      <div className="flex flex-col h-full space-y-6 font-sans pb-10 relative">
+        
+        {/* Success Toast */}
+        <div className={`fixed top-6 right-6 z-50 transition-all duration-300 transform ${successToast.show ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"}`}>
+          <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl shadow-lg flex items-center gap-3 backdrop-blur-md">
+            <CheckCircle size={20} />
+            <div>
+              <h4 className="font-bold text-sm">{successToast.title}</h4>
+              <p className="text-xs text-emerald-400/80">{successToast.message}</p>
+            </div>
+          </div>
+        </div>
+
         <div>
           <h2 className="text-xl font-bold tracking-wide text-white">Central Connections & Integrations</h2>
           <p className="text-sm text-slate-500 mt-1">
