@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { fetchApi } from "@/lib/api";
-import { Mail, ShieldCheck, ArrowRight, Cpu } from "lucide-react";
+import { Mail, ShieldCheck, ArrowRight, Cpu, Eye, EyeOff } from "lucide-react";
 
 // ─── Registration: Two-step OTP flow ─────────────────────────────────────────
 type RegStep = "details" | "otp";
@@ -24,6 +24,7 @@ function RegisterForm() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showRegPassword, setShowRegPassword] = useState(false);
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,15 +121,24 @@ function RegisterForm() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="reg-password">Password</Label>
-            <Input
-              id="reg-password"
-              type="password"
-              placeholder="Min. 8 characters"
-              value={regPassword}
-              onChange={(e) => setRegPassword(e.target.value)}
-              required
-              className="bg-background/50 border-border"
-            />
+            <div className="relative">
+              <Input
+                id="reg-password"
+                type={showRegPassword ? "text" : "password"}
+                placeholder="Min. 8 characters"
+                value={regPassword}
+                onChange={(e) => setRegPassword(e.target.value)}
+                required
+                className="bg-background/50 border-border pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowRegPassword(!showRegPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+              >
+                {showRegPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Sending OTP..." : <span className="flex items-center justify-center gap-2"><Mail size={16} /> Send Verification Code <ArrowRight size={16} /></span>}
@@ -187,6 +197,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,14 +257,23 @@ export default function LoginPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="bg-background/50 border-border"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="bg-background/50 border-border pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Authenticating..." : "Login"}

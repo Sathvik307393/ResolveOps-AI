@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
-import { GitBranch, Cpu, Database, Activity, Key, Server, Layers, AppWindow } from "lucide-react";
+import { GitBranch, Cpu, Database, Activity, Key, Server, Layers, AppWindow, Eye, EyeOff } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
 interface IntegrationsState {
@@ -31,7 +31,8 @@ export default function IntegrationsManager() {
   const [azureTenant, setAzureTenant] = useState("");
   const [azureClient, setAzureClient] = useState("");
   const [azureSecret, setAzureSecret] = useState("");
-
+  const [showGithubPat, setShowGithubPat] = useState(false);
+  const [showAzureSecret, setShowAzureSecret] = useState(false);
   const loadIntegrations = () => {
     fetchApi("/api/v1/integrations")
       .then((data) => {
@@ -175,13 +176,22 @@ export default function IntegrationsManager() {
               <div className="space-y-3 pt-2">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Personal Access Token</label>
-                  <input
-                    type="password"
-                    value={githubPat}
-                    onChange={(e) => setGithubPat(e.target.value)}
-                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                    className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none focus:border-indigo-500/50"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showGithubPat ? "text" : "password"}
+                      value={githubPat}
+                      onChange={(e) => setGithubPat(e.target.value)}
+                      placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                      className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 pr-10 text-xs font-mono focus:outline-none focus:border-indigo-500/50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowGithubPat(!showGithubPat)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    >
+                      {showGithubPat ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-850">
@@ -287,13 +297,22 @@ export default function IntegrationsManager() {
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Client Secret</label>
-                  <input
-                    type="password"
-                    value={azureSecret}
-                    onChange={(e) => setAzureSecret(e.target.value)}
-                    placeholder="••••••••••••••••"
-                    className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showAzureSecret ? "text" : "password"}
+                      value={azureSecret}
+                      onChange={(e) => setAzureSecret(e.target.value)}
+                      placeholder="••••••••••••••••"
+                      className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 pr-10 text-xs font-mono focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAzureSecret(!showAzureSecret)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    >
+                      {showAzureSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-850">

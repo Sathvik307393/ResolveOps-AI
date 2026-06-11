@@ -10,41 +10,41 @@
 }
 
 :root {
-  /* Deep violet/navy base matching the image */
-  --background: oklch(0.18 0.05 285);
-  --foreground: oklch(0.95 0 0);
+  /* Obsidian Base */
+  --background: oklch(0.15 0.02 250);
+  --foreground: oklch(0.98 0 0);
   
-  /* Semi-transparent violet cards */
-  --card: oklch(0.22 0.08 285);
-  --card-foreground: oklch(0.95 0 0);
+  /* Semi-transparent dark cards */
+  --card: oklch(0.18 0.03 250);
+  --card-foreground: oklch(0.98 0 0);
   
-  --popover: oklch(0.22 0.08 285);
-  --popover-foreground: oklch(0.95 0 0);
+  --popover: oklch(0.18 0.03 250);
+  --popover-foreground: oklch(0.98 0 0);
   
-  /* Accents */
-  --primary: oklch(0.55 0.3 285);
-  --primary-foreground: oklch(1 0 0);
+  /* Electric Teal Accents */
+  --primary: oklch(0.75 0.15 200); /* Cyan/Teal */
+  --primary-foreground: oklch(0.1 0 0);
   
-  --secondary: oklch(0.25 0.1 285);
-  --secondary-foreground: oklch(0.9 0 0);
+  --secondary: oklch(0.25 0.05 250);
+  --secondary-foreground: oklch(0.9 0.05 200);
   
-  --muted: oklch(0.28 0.1 285);
+  --muted: oklch(0.25 0.03 250);
   --muted-foreground: oklch(0.7 0 0);
   
-  --accent: oklch(0.3 0.15 285);
-  --accent-foreground: oklch(0.95 0 0);
+  --accent: oklch(0.3 0.08 200);
+  --accent-foreground: oklch(0.98 0 0);
   
   /* Status Colors */
-  --destructive: oklch(0.45 0.25 20); /* Neon Red */
+  --destructive: oklch(0.5 0.25 20); /* Bright Red */
   --destructive-foreground: oklch(1 0 0);
-  --warning: oklch(0.65 0.25 60); /* Neon Amber */
-  --warning-foreground: oklch(1 0 0);
-  --success: oklch(0.6 0.2 150); /* Neon Green */
-  --success-foreground: oklch(1 0 0);
+  --warning: oklch(0.7 0.2 60); /* Bright Amber */
+  --warning-foreground: oklch(0.1 0 0);
+  --success: oklch(0.65 0.2 150); /* Bright Green */
+  --success-foreground: oklch(0.1 0 0);
   
-  --border: oklch(0.35 0.1 285);
-  --input: oklch(0.28 0.1 285);
-  --ring: oklch(0.55 0.3 285);
+  --border: oklch(0.3 0.05 250);
+  --input: oklch(0.25 0.04 250);
+  --ring: oklch(0.75 0.15 200);
   
   --radius: 0.75rem;
 }
@@ -80,8 +80,8 @@
     @apply border-border outline-ring/50;
   }
   body {
-    /* Implement the radial gradient background from the mockup */
-    background: radial-gradient(circle at 50% 20%, #1c183b 0%, #0d0f1a 100%);
+    /* Implement a very deep slate to black radial gradient with a hint of teal at the top */
+    background: radial-gradient(circle at 50% -10%, #083344 0%, #020617 80%, #000000 100%);
     background-attachment: fixed;
     @apply text-foreground font-sans min-h-screen;
   }
@@ -89,11 +89,11 @@
 
 @layer utilities {
   .glass-panel {
-    background: linear-gradient(145deg, rgba(30, 27, 56, 0.6) 0%, rgba(18, 17, 36, 0.8) 100%);
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.6) 0%, rgba(2, 6, 23, 0.8) 100%);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(6, 182, 212, 0.15);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
   }
   
   .glow-red {
@@ -103,9 +103,11 @@
   
   .glow-green {
     box-shadow: 0 0 15px 0 rgba(16, 185, 129, 0.4);
+    border: 1px solid rgba(16, 185, 129, 0.5);
   }
   
   .glow-primary {
-    box-shadow: 0 0 15px 0 rgba(99, 102, 241, 0.4);
+    box-shadow: 0 0 20px 0 rgba(6, 182, 212, 0.4);
+    border: 1px solid rgba(6, 182, 212, 0.6);
   }
 }
