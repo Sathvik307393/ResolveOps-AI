@@ -701,8 +701,8 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
         
         if pat:
             headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
-            # Fetch 30 repos without affiliation filter to get all orgs and collaborators
-            repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=30", headers=headers)
+            # Fetch up to 100 repos without affiliation filter to get all orgs and collaborators
+            repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=100", headers=headers)
             if repos_res.status_code == 200:
                 repos = repos_res.json()
                 for repo in repos:
