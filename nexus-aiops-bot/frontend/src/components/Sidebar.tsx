@@ -97,10 +97,10 @@ export default function Sidebar() {
 
           return (
             <Link key={item.name} href={item.path}>
-              <div className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+              <div className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-md transition-all ${
                 isActive 
-                  ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 glow-primary" 
-                  : "text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent"
+                  ? "bg-primary/10 text-primary border border-primary/20 shadow-sm" 
+                  : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.03] border border-transparent"
               }`}>
                 <Icon size={18} />
                 <span className="font-medium text-sm">{item.name}</span>
