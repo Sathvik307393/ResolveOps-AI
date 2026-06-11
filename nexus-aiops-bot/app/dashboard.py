@@ -1939,77 +1939,23 @@ def generate_mock_workflow_status(anomaly_type):
 
 @st.cache_data(ttl=2)
 def fetch_github_workflow_status(anomaly_type="healthy"):
-    repo_fullname = get_git_repo_info()
-    github_token = os.getenv("GITHUB_TOKEN") or st.session_state.get("github_token", "")
-    
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
-    }
-    if github_token:
-        headers["Authorization"] = f"token {github_token}"
-    
-    runs_url = f"https://api.github.com/repos/{repo_fullname}/actions/runs"
-    
+    jwt_token = st.session_state.get("jwt_token")
+    if not jwt_token:
+        return generate_mock_workflow_status(anomaly_type)
+        
     try:
-        r = requests.get(runs_url, headers=headers, timeout=2)
+        # Fetch from our new SaaS backend endpoint
+        api_url = f"{api_base_url}/api/v1/github/workflow_status"
+        headers = {"Authorization": f"Bearer {jwt_token}"}
+        r = requests.get(api_url, headers=headers, timeout=5)
         if r.status_code == 200:
-            data = r.json()
-            runs = data.get("workflow_runs", [])
-            if not runs:
-                return generate_mock_workflow_status(anomaly_type)
-            
-            latest_run = runs[0]
-            run_id = latest_run["id"]
-            
-            jobs_url = f"https://api.github.com/repos/{repo_fullname}/actions/runs/{run_id}/jobs"
-            jr = requests.get(jobs_url, headers=headers, timeout=2)
-            jobs_data = {}
-            if jr.status_code == 200:
-                jobs_data = jr.json()
-            else:
-                return generate_mock_workflow_status(anomaly_type)
-            
-            jobs = []
-            for j in jobs_data.get("jobs", []):
-                jobs.append({
-                    "id": j.get("id"),
-                    "name": j.get("name"),
-                    "status": j.get("status"),
-                    "conclusion": j.get("conclusion"),
-                    "started_at": j.get("started_at"),
-                    "completed_at": j.get("completed_at"),
-                    "html_url": j.get("html_url"),
-                    "steps": [{"name": s.get("name"), "status": s.get("status"), "conclusion": s.get("conclusion")} for s in j.get("steps", [])]
-                })
-                
-            return {
-                "source": "api",
-                "repo": repo_fullname,
-                "run_id": run_id,
-                "run_number": latest_run.get("run_number"),
-                "name": latest_run.get("name"),
-                "status": latest_run.get("status"),
-                "conclusion": latest_run.get("conclusion"),
-                "html_url": latest_run.get("html_url"),
-                "event": latest_run.get("event"),
-                "head_branch": latest_run.get("head_branch"),
-                "head_commit_message": latest_run.get("head_commit", {}).get("message", "No message"),
-                "head_sha": latest_run.get("head_sha"),
-                "actor": latest_run.get("triggering_actor", {}).get("login", latest_run.get("actor", {}).get("login", "unknown")),
-                "created_at": latest_run.get("created_at"),
-                "updated_at": latest_run.get("updated_at"),
-                "jobs": jobs
-            }
+            res = r.json()
+            if res.get("status") == "success" and res.get("data"):
+                return res["data"]
+            return generate_mock_workflow_status(anomaly_type)
         else:
-            cli_res = fetch_github_workflow_status_from_cli()
-            if cli_res:
-                return cli_res
             return generate_mock_workflow_status(anomaly_type)
     except Exception:
-        cli_res = fetch_github_workflow_status_from_cli()
-        if cli_res:
-            return cli_res
         return generate_mock_workflow_status(anomaly_type)
 
 def get_job_diagnostic(job_name, steps):

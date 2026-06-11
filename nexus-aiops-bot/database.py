@@ -382,3 +382,29 @@ def get_predictive_risks(tenant_id: str, limit: int = 50) -> list:
     except Exception as e:
         print(f"DynamoDB Predictive Risks read failed: {e}")
         return []
+
+# --- Integrations Storage ---
+def update_user_integrations(email: str, integrations: dict) -> bool:
+    try:
+        table = get_users_table()
+        table.update_item(
+            Key={'email': email},
+            UpdateExpression="SET integrations = :i",
+            ExpressionAttributeValues={':i': integrations}
+        )
+        return True
+    except Exception as e:
+        print(f"Failed to update integrations for {email}: {e}")
+        return False
+
+def get_user_integrations(email: str) -> dict:
+    try:
+        table = get_users_table()
+        response = table.get_item(Key={'email': email})
+        if 'Item' in response:
+            return response['Item'].get('integrations', {})
+        return {}
+    except Exception as e:
+        print(f"Failed to fetch integrations: {e}")
+        return {}
+
