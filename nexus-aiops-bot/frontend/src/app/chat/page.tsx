@@ -73,7 +73,11 @@ function CodeBlock({ children, ...props }: any) {
 
   if (excalidraw) {
     try {
-      const parsedElements = JSON.parse(excalidraw.codeText.trim());
+      // Clean up common LLM JSON syntax errors (like trailing commas) before parsing
+      let cleanedJsonText = excalidraw.codeText.trim();
+      cleanedJsonText = cleanedJsonText.replace(/,\s*([\]}])/g, '$1');
+      
+      const parsedElements = JSON.parse(cleanedJsonText);
       return <ExcalidrawBoard elements={parsedElements.elements || []} />;
     } catch (e) {
       return (
