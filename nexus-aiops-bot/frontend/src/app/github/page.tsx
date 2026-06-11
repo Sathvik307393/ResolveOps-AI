@@ -68,7 +68,7 @@ export default function GitHubDeployments() {
             </p>
           </div>
           <button
-            onClick={fetchData}
+            onClick={() => fetchData(false)}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
           >
             <RefreshCw size={14} /> Refresh Data
