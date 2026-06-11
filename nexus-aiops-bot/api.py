@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Security
+from fastapi import FastAPI, HTTPException, Depends, Security, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import uvicorn
@@ -634,9 +634,47 @@ def generate_incident_rca(incident_id: str, current_user: dict = Depends(get_cur
 
 github_deployments_cache = {}
 github_repo_workflow_cache = {}
+notified_failed_workflows = set()
+
+def auto_diagnose_and_notify_pipeline(current_user: dict, pat: str, repo_name: str, workflow_run_id: str):
+    """Background task to diagnose pipeline failure and send email."""
+    try:
+        headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+        jobs_url = f"https://api.github.com/repos/{repo_name}/actions/runs/{workflow_run_id}/jobs"
+        jobs_res = requests.get(jobs_url, headers=headers)
+        if jobs_res.status_code != 200: return
+            
+        jobs = jobs_res.json().get("jobs", [])
+        failed_job = next((job for job in jobs if job.get("conclusion") == "failure"), None)
+        if not failed_job: return
+            
+        job_id = failed_job["id"]
+        logs_url = f"https://api.github.com/repos/{repo_name}/actions/jobs/{job_id}/logs"
+        logs_res = requests.get(logs_url, headers=headers)
+        if logs_res.status_code != 200: return
+            
+        raw_logs = logs_res.text
+        log_snippet = raw_logs[-3000:]
+        diagnosis_query = f"The GitHub Actions pipeline '{failed_job['name']}' in repository '{repo_name}' failed. Analyze these logs and predict the exact root cause and an accurate solution:\n\n{log_snippet}"
+        
+        ai_result = engine.run_query(diagnosis_query, time_window_mins=60)
+        diagnosis = ai_result.get("answer", "Analysis failed.")
+        
+        # Send Email
+        notifications.notify_pipeline_failure(
+            tenant_email=current_user.get("email"),
+            repository=repo_name,
+            job_name=failed_job["name"],
+            raw_logs=log_snippet,
+            ai_diagnosis=diagnosis,
+            full_name=current_user.get("full_name", "")
+        )
+    except Exception as e:
+        print(f"Background diagnostic error: {e}")
+
 
 @app.get("/api/v1/github/deployments")
-def get_github_deployments(current_user: dict = Depends(get_current_user)):
+def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
     """Retrieves deployment logs for the authenticated tenant."""
     try:
         tenant_id = current_user.get("user_id")
@@ -725,6 +763,19 @@ def get_github_deployments(current_user: dict = Depends(get_current_user)):
                             "db_item": db_item
                         }
                         db_items.append(db_item)
+                        
+                        # Trigger background diagnosis if pipeline failed and hasn't been notified yet
+                        if db_item.get("conclusion") == "failure" and db_item.get("workflow_run_id") != "PAT_SYNC":
+                            run_id = db_item.get("workflow_run_id")
+                            if run_id not in notified_failed_workflows:
+                                notified_failed_workflows.add(run_id)
+                                background_tasks.add_task(
+                                    auto_diagnose_and_notify_pipeline, 
+                                    current_user, 
+                                    pat, 
+                                    repo_name, 
+                                    run_id
+                                )
                             
         # Sort combined items by timestamp descending
         db_items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
