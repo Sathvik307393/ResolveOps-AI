@@ -767,6 +767,17 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                                         "conclusion": "success"
                                     }
                     
+                    if not db_item:
+                        db_item = {
+                            "commit_sha": "N/A",
+                            "commit_msg": "No pipeline data or repository is empty.",
+                            "author": "-",
+                            "repository": repo_name,
+                            "timestamp": repo_updated_at,
+                            "workflow_run_id": "PAT_SYNC",
+                            "status": "completed",
+                            "conclusion": "success"
+                        }
                     if db_item:
                         github_repo_workflow_cache[cache_key_repo] = {
                             "updated_at": repo_updated_at,
