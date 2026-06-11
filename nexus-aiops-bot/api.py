@@ -13,10 +13,11 @@ from passlib.context import CryptContext
 import uuid
 import boto3
 from boto3.dynamodb.conditions import Key
+import requests
 
 from database import (
-    init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table,
-    store_log, get_logs, update_reliability_score, get_reliability_score, store_deployment, get_latest_deployment,
+    init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table, get_deployments_table,
+    store_log, get_logs as db_get_logs, update_reliability_score, get_reliability_score, store_deployment, get_latest_deployment,
     store_chat_message, get_chat_history, get_predictive_risks
 )
 import notifications
@@ -280,6 +281,65 @@ def get_chat_history_endpoint(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# In-memory SaaS Connection store
+integrations_store = {}
+
+def fetch_latest_github_deployment(tenant_id: str) -> Optional[dict]:
+    """Fetches the latest commit from the tenant's most recently updated repository using their PAT."""
+    try:
+        tenant_data = integrations_store.get(tenant_id, {})
+        if not tenant_data.get("github"):
+            return None # GitHub not connected
+            
+        creds = tenant_data.get("credentials", {}).get("github", {})
+        pat = creds.get("pat")
+        if not pat:
+            return None
+            
+        headers = {
+            "Authorization": f"Bearer {pat}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        
+        # 1. Fetch most recently updated repo
+        repos_url = "https://api.github.com/user/repos?sort=updated&per_page=1"
+        repos_res = requests.get(repos_url, headers=headers)
+        if repos_res.status_code != 200:
+            print(f"Failed to fetch repos: {repos_res.text}")
+            return None
+            
+        repos = repos_res.json()
+        if not repos:
+            return None
+            
+        latest_repo = repos[0]
+        repo_full_name = latest_repo["full_name"]
+        
+        # 2. Fetch latest commit from this repo
+        commits_url = f"https://api.github.com/repos/{repo_full_name}/commits?per_page=1"
+        commits_res = requests.get(commits_url, headers=headers)
+        if commits_res.status_code != 200:
+            print(f"Failed to fetch commits: {commits_res.text}")
+            return None
+            
+        commits = commits_res.json()
+        if not commits:
+            return None
+            
+        latest_commit = commits[0]
+        
+        return {
+            "commit_sha": latest_commit["sha"],
+            "commit_msg": latest_commit["commit"]["message"],
+            "author": latest_commit["commit"]["author"]["name"],
+            "repository": repo_full_name,
+            "timestamp": latest_commit["commit"]["author"]["date"],
+            "pr_url": latest_commit["html_url"] # link to commit
+        }
+    except Exception as e:
+        print(f"Error fetching github deployment: {e}")
+        return None
+
 # --- Telemetry Ingress Models ---
 class UniversalEvent(BaseModel):
     provider: str
@@ -405,7 +465,7 @@ def ingest_telemetry(event: NexusEvent, current_user: dict = Depends(get_current
         else:
             # --- 2. Predictive Pipeline ---
             # Fetch recent logs for analyzing trends
-            recent_logs = get_logs(tenant_id, limit=50)
+            recent_logs = db_get_logs(tenant_id, limit=50)
             
             # Evaluate using predictive heuristics
             is_anomaly, prediction = predictive_engine.analyze_logs_and_predict(recent_logs)
@@ -414,8 +474,11 @@ def ingest_telemetry(event: NexusEvent, current_user: dict = Depends(get_current
                 current_score = get_reliability_score(tenant_email)
                 update_reliability_score(tenant_email, current_score - 2.0)
 
-                # Correlate with recent GitHub Deployment
-                latest_deploy = get_latest_deployment(tenant_id)
+                # Correlate with recent GitHub Deployment using PAT
+                latest_deploy = fetch_latest_github_deployment(tenant_id)
+                if not latest_deploy:
+                    # Fallback to webhooks if available
+                    latest_deploy = get_latest_deployment(tenant_id)
 
                 # Generate AI-assisted Predictive RCA
                 rca_details = predictive_engine.generate_predictive_rca(prediction, latest_deploy)
@@ -618,7 +681,7 @@ def get_service_metrics(current_user: dict = Depends(get_current_user)):
     """Compiles service-specific telemetry indicators."""
     try:
         tenant_id = current_user.get("user_id")
-        logs = get_logs(tenant_id, limit=100)
+        logs = db_get_logs(tenant_id, limit=100)
         
         # Aggregate heuristics per service
         metrics = {}
@@ -653,8 +716,6 @@ def get_service_metrics(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# In-memory SaaS Connection store
-integrations_store = {}
 
 class ConnectionRequest(BaseModel):
     service: str # "github", "eks", or "aks"
@@ -687,8 +748,13 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
             }
         
         service_key = req.service.lower()
-        # Allow dynamic addition of keys if needed, but primarily relying on initialized list
         integrations_store[tenant_id][service_key] = req.connected
+        
+        if req.credentials:
+            if "credentials" not in integrations_store[tenant_id]:
+                integrations_store[tenant_id]["credentials"] = {}
+            integrations_store[tenant_id]["credentials"][service_key] = req.credentials
+            
         return {"status": "success", "message": f"{req.service} connection status updated", "integrations": integrations_store[tenant_id]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

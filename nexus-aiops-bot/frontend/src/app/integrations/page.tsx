@@ -25,6 +25,7 @@ export default function IntegrationsManager() {
   const [activeModal, setActiveModal] = useState<"github" | "eks" | "aks" | "aws_ec2" | "azure_vm" | "azure_vmss" | "azure_app_service" | null>(null);
   
   // Modal Fields
+  const [githubPat, setGithubPat] = useState("");
   const [awsRole, setAwsRole] = useState("");
   const [awsRegion, setAwsRegion] = useState("us-east-1");
   const [azureTenant, setAzureTenant] = useState("");
@@ -64,6 +65,7 @@ export default function IntegrationsManager() {
       }
       setActiveModal(null);
       // Reset inputs
+      setGithubPat("");
       setAwsRole("");
       setAzureSecret("");
     } catch (err) {
@@ -143,7 +145,7 @@ export default function IntegrationsManager() {
 
         <h3 className="text-sm font-semibold text-slate-300 mt-4 border-b border-slate-800 pb-2">Version Control</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {renderCard("github", "GitHub Integration", "Connect your source repositories to automatically log releases and capture workflow runs.", GitBranch, "text-indigo-400", "bg-indigo-400/10")}
+          {renderCard("github", "GitHub Integration", "Connect your source repositories to automatically log releases and capture workflow runs.", GitBranch, "text-indigo-400", "bg-indigo-400/10", "github")}
         </div>
 
         <h3 className="text-sm font-semibold text-slate-300 mt-6 border-b border-slate-800 pb-2">AWS Resources</h3>
@@ -159,6 +161,47 @@ export default function IntegrationsManager() {
           {renderCard("azure_vmss", "Azure VM Scale Sets", "Monitor auto-scaling node groups and instance telemetry.", Layers, "text-cyan-400", "bg-cyan-400/10", "azure")}
           {renderCard("azure_app_service", "Azure App Services", "Integrate web apps to capture application logs and traces.", AppWindow, "text-teal-400", "bg-teal-400/10", "azure")}
         </div>
+
+        {/* GitHub Modal */}
+        {activeModal === "github" && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="glass-panel border border-slate-800 w-full max-w-md rounded-2xl overflow-hidden relative shadow-2xl p-6 space-y-4">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <GitBranch className="text-indigo-400" /> Connect GitHub
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Provide a Personal Access Token (PAT) with read access to repositories. This allows NexusAI to fetch recent deployment commits for Predictive RCA.
+              </p>
+              <div className="space-y-3 pt-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Personal Access Token</label>
+                  <input
+                    type="password"
+                    value={githubPat}
+                    onChange={(e) => setGithubPat(e.target.value)}
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-850">
+                <button
+                  onClick={() => setActiveModal(null)}
+                  className="text-slate-400 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleToggleConnect("github", true, { pat: githubPat })}
+                  disabled={!githubPat}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50 cursor-pointer"
+                >
+                  Verify & Connect
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* AWS Modal */}
         {(activeModal === "eks" || activeModal === "aws_ec2") && (
