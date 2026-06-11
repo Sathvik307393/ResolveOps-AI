@@ -13,6 +13,8 @@ interface DeploymentEvent {
   repository: string;
   workflow_run_id?: string;
   timestamp: string;
+  status?: string;
+  conclusion?: string;
 }
 
 export default function GitHubDeployments() {
@@ -20,8 +22,8 @@ export default function GitHubDeployments() {
   const [loading, setLoading] = useState(true);
   const [deployments, setDeployments] = useState<DeploymentEvent[]>([]);
 
-  const fetchData = () => {
-    setLoading(true);
+  const fetchData = (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     fetchApi("/api/v1/github/deployments")
       .then((data) => {
         setDeployments(Array.isArray(data) ? data : []);
@@ -36,7 +38,14 @@ export default function GitHubDeployments() {
       router.push("/login");
       return;
     }
-    fetchData();
+    fetchData(); // Initial load
+
+    // Auto-poll every 5 seconds for live tracking
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [router]);
 
   if (loading) {
@@ -109,9 +118,19 @@ export default function GitHubDeployments() {
                         <span>{deploy.author}</span>
                       </td>
                       <td className="p-4">
-                        <span className="bg-emerald-500/20 text-emerald-400 px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-emerald-500/30 flex items-center w-fit gap-1">
-                          <CheckCircle size={10} /> Sync Complete
-                        </span>
+                        {deploy.status === "in_progress" || deploy.status === "queued" ? (
+                          <span className="bg-amber-500/20 text-amber-400 px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-amber-500/30 flex items-center w-fit gap-1">
+                            <Activity size={10} className="animate-spin" /> {deploy.status === "queued" ? "Queued" : "Running"}
+                          </span>
+                        ) : deploy.conclusion === "failure" ? (
+                          <span className="bg-rose-500/20 text-rose-400 px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-rose-500/30 flex items-center w-fit gap-1">
+                            <XCircle size={10} /> Failed
+                          </span>
+                        ) : (
+                          <span className="bg-emerald-500/20 text-emerald-400 px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-emerald-500/30 flex items-center w-fit gap-1">
+                            <CheckCircle size={10} /> Sync Complete
+                          </span>
+                        )}
                       </td>
                       <td className="p-4 text-slate-500 font-mono text-xs">
                         {deploy.timestamp ? new Date(deploy.timestamp).toLocaleString() : "just now"}

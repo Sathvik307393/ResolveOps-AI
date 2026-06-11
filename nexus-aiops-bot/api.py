@@ -632,11 +632,22 @@ def generate_incident_rca(incident_id: str, current_user: dict = Depends(get_cur
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+github_deployments_cache = {}
+
 @app.get("/api/v1/github/deployments")
 def get_github_deployments(current_user: dict = Depends(get_current_user)):
     """Retrieves deployment logs for the authenticated tenant."""
     try:
         tenant_id = current_user.get("user_id")
+        
+        # Check cache
+        current_time = time.time()
+        cache_key = f"github_deployments_{tenant_id}"
+        if cache_key in github_deployments_cache:
+            cache_entry = github_deployments_cache[cache_key]
+            if current_time - cache_entry['time'] < 10:  # 10 second TTL
+                return cache_entry['data']
+
         table = get_deployments_table()
         response = table.query(
             KeyConditionExpression=Key('tenant_id').eq(tenant_id),
@@ -651,29 +662,56 @@ def get_github_deployments(current_user: dict = Depends(get_current_user)):
         
         if pat:
             headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
-            repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=30", headers=headers)
+            # Only fetch top 5 repos to avoid strict rate limits when auto-polling
+            repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=5", headers=headers)
             if repos_res.status_code == 200:
                 repos = repos_res.json()
                 for repo in repos:
                     repo_name = repo.get("full_name")
                     if not repo_name: continue
-                    commits_url = f"https://api.github.com/repos/{repo_name}/commits?per_page=1"
-                    commits_res = requests.get(commits_url, headers=headers)
-                    if commits_res.status_code == 200:
-                        commits = commits_res.json()
-                        if commits and isinstance(commits, list) and len(commits) > 0:
-                            commit = commits[0]
+                    # Fetch latest workflow run for accurate status
+                    runs_url = f"https://api.github.com/repos/{repo_name}/actions/runs?per_page=1"
+                    runs_res = requests.get(runs_url, headers=headers)
+                    if runs_res.status_code == 200:
+                        runs_data = runs_res.json()
+                        runs = runs_data.get("workflow_runs", [])
+                        if runs:
+                            run = runs[0]
                             db_items.append({
-                                "commit_sha": commit.get("sha", ""),
-                                "commit_msg": commit.get("commit", {}).get("message", "Commit"),
-                                "author": commit.get("commit", {}).get("author", {}).get("name", "Unknown"),
+                                "commit_sha": run.get("head_sha", ""),
+                                "commit_msg": run.get("head_commit", {}).get("message", "Commit"),
+                                "author": run.get("head_commit", {}).get("author", {}).get("name", "Unknown"),
                                 "repository": repo_name,
-                                "timestamp": commit.get("commit", {}).get("author", {}).get("date", ""),
-                                "workflow_run_id": "PAT_SYNC"
+                                "timestamp": run.get("updated_at", run.get("created_at", "")),
+                                "workflow_run_id": str(run.get("id", "")),
+                                "status": run.get("status"),
+                                "conclusion": run.get("conclusion")
                             })
+                        else:
+                            # Fallback to commit if no workflow runs exist
+                            commits_url = f"https://api.github.com/repos/{repo_name}/commits?per_page=1"
+                            commits_res = requests.get(commits_url, headers=headers)
+                            if commits_res.status_code == 200:
+                                commits = commits_res.json()
+                                if commits and isinstance(commits, list) and len(commits) > 0:
+                                    commit = commits[0]
+                                    db_items.append({
+                                        "commit_sha": commit.get("sha", ""),
+                                        "commit_msg": commit.get("commit", {}).get("message", "Commit"),
+                                        "author": commit.get("commit", {}).get("author", {}).get("name", "Unknown"),
+                                        "repository": repo_name,
+                                        "timestamp": commit.get("commit", {}).get("author", {}).get("date", ""),
+                                        "workflow_run_id": "PAT_SYNC",
+                                        "status": "completed",
+                                        "conclusion": "success"
+                                    })
                             
         # Sort combined items by timestamp descending
         db_items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        
+        # Save to cache
+        github_deployments_cache[cache_key] = {'time': current_time, 'data': db_items}
+        
         return db_items
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
