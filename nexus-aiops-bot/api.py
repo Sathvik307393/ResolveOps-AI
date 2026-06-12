@@ -16,9 +16,10 @@ from boto3.dynamodb.conditions import Key
 import requests
 
 from database import (
-    init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table, get_deployments_table,
-    store_log, get_logs as db_get_logs, update_reliability_score, get_reliability_score, store_deployment, get_latest_deployment,
-    store_chat_message, get_chat_history, delete_chat_history, get_predictive_risks, get_chat_sessions
+    init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table,
+    store_log, get_logs, update_reliability_score, get_reliability_score, store_deployment, get_latest_deployment,
+    store_chat_message, get_chat_history, get_predictive_risks,
+    update_user_integrations, get_user_integrations
 )
 import notifications
 from predictive_engine import PredictiveEngine
@@ -1008,6 +1009,7 @@ def get_service_metrics(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Removed In-memory SaaS Connection store in favor of DynamoDB
 
 class ConnectionRequest(BaseModel):
     service: str # "github", "eks", or "aks"
@@ -1018,53 +1020,174 @@ class ConnectionRequest(BaseModel):
 def get_integrations(current_user: dict = Depends(get_current_user)):
     """Retrieves external integration statuses for this tenant workspace."""
     try:
-        tenant_id = current_user.get("user_id")
-        if tenant_id not in integrations_store:
-            integrations_store[tenant_id] = {
-                "github": False, "eks": False, "aks": False,
-                "aws_ec2": False, "azure_vm": False, "azure_vmss": False, "azure_app_service": False
-            }
-        return integrations_store[tenant_id]
+        tenant_email = current_user.get("email")
+        integrations = get_user_integrations(tenant_email)
+        
+        status_map = {
+            "github": False, "eks": False, "aks": False,
+            "aws_ec2": False, "azure_vm": False, "azure_vmss": False, "azure_app_service": False,
+            "github_details": None
+        }
+        for k in list(status_map.keys()):
+            if k == "github_details": continue
+            if k in integrations and integrations[k].get("connected"):
+                status_map[k] = True
+                if k == "github":
+                    status_map["github_details"] = integrations[k].get("credentials", {}).get("repo_fullname")
+                
+        return status_map
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/integrations/connect")
 def update_integration_connection(req: ConnectionRequest, current_user: dict = Depends(get_current_user)):
     """Updates / Saves credentials and toggles connection status for an external service."""
+    import requests
     try:
-        tenant_id = current_user.get("user_id")
-        if tenant_id not in integrations_store:
-            integrations_store[tenant_id] = {
-                "github": False, "eks": False, "aks": False,
-                "aws_ec2": False, "azure_vm": False, "azure_vmss": False, "azure_app_service": False
-            }
+        tenant_email = current_user.get("email")
+        integrations = get_user_integrations(tenant_email)
         
         service_key = req.service.lower()
-        integrations_store[tenant_id][service_key] = req.connected
+        if service_key not in integrations:
+            integrations[service_key] = {}
+            
+        if req.connected and service_key == "github" and req.credentials:
+            github_token = req.credentials.get("github_token")
+            repo_fullname = req.credentials.get("repo_fullname")
+            
+            if github_token and repo_fullname:
+                repo_parts = repo_fullname.split("/")
+                if len(repo_parts) != 2:
+                    raise HTTPException(status_code=400, detail="Repository name must be in the format 'owner/repo'")
+                requested_owner = repo_parts[0]
+                
+                headers = {
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                    "Authorization": f"token {github_token}"
+                }
+                r = requests.get("https://api.github.com/user", headers=headers, timeout=5)
+                if r.status_code != 200:
+                    raise HTTPException(status_code=400, detail="Invalid GitHub Personal Access Token")
+                
+                user_data = r.json()
+                github_login = user_data.get("login")
+                
+                if not github_login:
+                    raise HTTPException(status_code=400, detail="Could not determine GitHub account from PAT")
+                
+                if requested_owner.lower() != github_login.lower():
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"This PAT belongs to account '{github_login}', but you are trying to connect a repository owned by '{requested_owner}'. You can only connect your own repositories."
+                    )
+                
+                req.credentials["github_username"] = github_login
+
+        integrations[service_key]["connected"] = req.connected
+        if req.credentials:
+            integrations[service_key]["credentials"] = req.credentials
+            
+        update_user_integrations(tenant_email, integrations)
         
-        username = None
-        if req.connected and req.credentials:
-            if "credentials" not in integrations_store[tenant_id]:
-                integrations_store[tenant_id]["credentials"] = {}
-            integrations_store[tenant_id]["credentials"][service_key] = req.credentials
-            
-            # Fetch username for github if pat is provided
-            if service_key == "github" and "pat" in req.credentials:
-                try:
-                    import requests
-                    pat = req.credentials["pat"]
-                    res = requests.get("https://api.github.com/user", headers={"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"})
-                    if res.status_code == 200:
-                        username = res.json().get("login")
-                except:
-                    pass
-            
-        return {
-            "status": "success", 
-            "message": f"{req.service} connection status updated", 
-            "integrations": integrations_store[tenant_id],
-            "username": username
+        # Build returned status map
+        status_map = {
+            "github": False, "eks": False, "aks": False,
+            "aws_ec2": False, "azure_vm": False, "azure_vmss": False, "azure_app_service": False,
+            "github_details": None
         }
+        for k in list(status_map.keys()):
+            if k == "github_details": continue
+            if k in integrations and integrations[k].get("connected"):
+                status_map[k] = True
+                if k == "github":
+                    status_map["github_details"] = integrations[k].get("credentials", {}).get("repo_fullname")
+                
+        return {"status": "success", "message": f"{req.service} connection status updated", "integrations": status_map}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+import requests
+
+@app.get("/api/v1/github/workflow_status")
+def get_github_workflow_status(current_user: dict = Depends(get_current_user)):
+    """Fetches real-time workflow status using tenant's stored GitHub credentials."""
+    try:
+        tenant_email = current_user.get("email")
+        integrations = get_user_integrations(tenant_email)
+        
+        if "github" not in integrations or not integrations["github"].get("connected"):
+            raise HTTPException(status_code=400, detail="GitHub integration not connected")
+            
+        creds = integrations["github"].get("credentials", {})
+        github_token = creds.get("github_token")
+        repo_fullname = creds.get("repo_fullname")
+        
+        if not github_token or not repo_fullname:
+            raise HTTPException(status_code=400, detail="GitHub credentials incomplete")
+            
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Authorization": f"token {github_token}"
+        }
+        
+        runs_url = f"https://api.github.com/repos/{repo_fullname}/actions/runs"
+        r = requests.get(runs_url, headers=headers, timeout=5)
+        
+        if r.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch from GitHub: {r.text}")
+            
+        data = r.json()
+        runs = data.get("workflow_runs", [])
+        if not runs:
+            return {"status": "success", "data": None, "message": "No workflow runs found"}
+            
+        latest_run = runs[0]
+        run_id = latest_run["id"]
+        
+        jobs_url = f"https://api.github.com/repos/{repo_fullname}/actions/runs/{run_id}/jobs"
+        jr = requests.get(jobs_url, headers=headers, timeout=5)
+        jobs_data = {}
+        if jr.status_code == 200:
+            jobs_data = jr.json()
+            
+        jobs = []
+        for j in jobs_data.get("jobs", []):
+            jobs.append({
+                "id": j.get("id"),
+                "name": j.get("name"),
+                "status": j.get("status"),
+                "conclusion": j.get("conclusion"),
+                "started_at": j.get("started_at"),
+                "completed_at": j.get("completed_at"),
+                "html_url": j.get("html_url"),
+                "steps": [{"name": s.get("name"), "status": s.get("status"), "conclusion": s.get("conclusion")} for s in j.get("steps", [])]
+            })
+            
+        result = {
+            "source": "api",
+            "repo": repo_fullname,
+            "run_id": run_id,
+            "run_number": latest_run.get("run_number"),
+            "name": latest_run.get("name"),
+            "status": latest_run.get("status"),
+            "conclusion": latest_run.get("conclusion"),
+            "html_url": latest_run.get("html_url"),
+            "event": latest_run.get("event"),
+            "head_branch": latest_run.get("head_branch"),
+            "head_commit_message": latest_run.get("head_commit", {}).get("message", "No message"),
+            "head_sha": latest_run.get("head_sha"),
+            "actor": latest_run.get("triggering_actor", {}).get("login", latest_run.get("actor", {}).get("login", "unknown")),
+            "created_at": latest_run.get("created_at"),
+            "updated_at": latest_run.get("updated_at"),
+            "jobs": jobs
+        }
+        return {"status": "success", "data": result}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

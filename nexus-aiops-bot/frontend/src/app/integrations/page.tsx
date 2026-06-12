@@ -20,8 +20,9 @@ export default function IntegrationsManager() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<IntegrationsState>({ 
-    github: false, eks: false, aks: false, aws_ec2: false, azure_vm: false, azure_vmss: false, azure_app_service: false 
+    github: false, eks: false, aks: false, aws_ec2: false, azure_vm: false, azure_vmss: false, azure_app_service: false
   });
+  const [githubDetails, setGithubDetails] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<"github" | "eks" | "aks" | "aws_ec2" | "azure_vm" | "azure_vmss" | "azure_app_service" | null>(null);
   
   // Modal Fields
@@ -31,18 +32,16 @@ export default function IntegrationsManager() {
   const [azureTenant, setAzureTenant] = useState("");
   const [azureClient, setAzureClient] = useState("");
   const [azureSecret, setAzureSecret] = useState("");
-  const [showGithubPat, setShowGithubPat] = useState(false);
-  const [showAzureSecret, setShowAzureSecret] = useState(false);
-  const [successToast, setSuccessToast] = useState<{show: boolean, title: string, message: string}>({show: false, title: "", message: ""});
-  
-  const showToast = (title: string, message: string) => {
-    setSuccessToast({ show: true, title, message });
-    setTimeout(() => setSuccessToast({ show: false, title: "", message: "" }), 4000);
-  };
+  const [githubRepo, setGithubRepo] = useState("");
+  const [githubToken, setGithubToken] = useState("");
+
   const loadIntegrations = () => {
     fetchApi("/api/v1/integrations")
-      .then((data) => {
-        if (data) setStatus(data);
+      .then((data: any) => {
+        if (data) {
+          setStatus(data);
+          if (data.github_details) setGithubDetails(data.github_details);
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -69,10 +68,8 @@ export default function IntegrationsManager() {
       });
       if (data?.integrations) {
         setStatus(data.integrations);
-        if (isConnect) {
-          const serviceName = service.toUpperCase().replace("_", " ");
-          const msg = data.username ? `Connected to GitHub as ${data.username}` : `Successfully connected to ${serviceName}`;
-          showToast("Connection Successful", msg);
+        if (data.integrations.github_details !== undefined) {
+          setGithubDetails(data.integrations.github_details);
         }
       }
       setActiveModal(null);
@@ -80,8 +77,10 @@ export default function IntegrationsManager() {
       setGithubPat("");
       setAwsRole("");
       setAzureSecret("");
-    } catch (err) {
-      alert("Failed to update integration connection");
+      setGithubRepo("");
+      setGithubToken("");
+    } catch (err: any) {
+      alert(err.message || "Failed to update integration connection");
     }
   };
 
@@ -112,11 +111,16 @@ export default function IntegrationsManager() {
             <div className={`p-3 bg-slate-800 rounded-lg ${color}`}>
               <Icon size={22} />
             </div>
-            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-              isConnected ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"
-            }`}>
-              {isConnected ? "Connected" : "Disconnected"}
-            </span>
+            <div className="flex flex-col items-end">
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                isConnected ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"
+              }`}>
+                {isConnected ? "Connected" : "Disconnected"}
+              </span>
+              {isConnected && key === "github" && githubDetails && (
+                <span className="text-[10px] text-slate-400 mt-1 font-mono">{githubDetails}</span>
+              )}
+            </div>
           </div>
           <h3 className="text-white font-semibold text-lg mb-1">{title}</h3>
           <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
@@ -194,27 +198,30 @@ export default function IntegrationsManager() {
                 <GitBranch className="text-indigo-400" /> Connect GitHub
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Provide a Personal Access Token (PAT) with read access to repositories. This allows NexusAI to fetch recent deployment commits for Predictive RCA.
+                Provide your GitHub repository details and a Personal Access Token (PAT) to authorize workflow and deployment synchronization.
               </p>
               <div className="space-y-3 pt-2">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Personal Access Token</label>
-                  <div className="relative">
-                    <input
-                      type={showGithubPat ? "text" : "password"}
-                      value={githubPat}
-                      onChange={(e) => setGithubPat(e.target.value)}
-                      placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                      className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 pr-10 text-xs font-mono focus:outline-none focus:border-indigo-500/50"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowGithubPat(!showGithubPat)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                    >
-                      {showGithubPat ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Repository Name</label>
+                  <input
+                    type="text"
+                    value={githubRepo}
+                    onChange={(e) => setGithubRepo(e.target.value)}
+                    placeholder="e.g., owner/repository"
+                    className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Personal Access Token (PAT)</label>
+                  <input
+                    type="password"
+                    value={githubToken}
+                    onChange={(e) => setGithubToken(e.target.value)}
+                    className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none focus:border-indigo-500/50"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1.5 leading-tight">
+                    <strong>Note:</strong> When creating a Classic PAT, only select the <code className="text-indigo-400 bg-indigo-400/10 px-1 py-0.5 rounded">repo</code> scope. Do not select <code className="text-rose-400 bg-rose-400/10 px-1 py-0.5 rounded">write:packages</code> or other unnecessary scopes.
+                  </p>
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-850">
@@ -225,8 +232,8 @@ export default function IntegrationsManager() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleToggleConnect("github", true, { pat: githubPat })}
-                  disabled={!githubPat}
+                  onClick={() => handleToggleConnect(activeModal as keyof IntegrationsState, true, { repo_fullname: githubRepo, github_token: githubToken })}
+                  disabled={!githubRepo || !githubToken}
                   className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50 cursor-pointer"
                 >
                   Verify & Connect
