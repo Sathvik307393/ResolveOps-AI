@@ -1,9 +1,9 @@
-from fastapi import FastAPI, HTTPException, Depends, Security
+from fastapi import FastAPI, HTTPException, Depends, Security, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import uvicorn
 from rag.rag_engine import LogRageEngine
-from typing import Optional, List
+from typing import Optional, List, Dict
 import jwt
 import datetime
 import hashlib
@@ -13,6 +13,7 @@ from passlib.context import CryptContext
 import uuid
 import boto3
 from boto3.dynamodb.conditions import Key
+import requests
 
 from database import (
     init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table,
@@ -66,13 +67,13 @@ class OTPRequest(BaseModel):
 otp_store: dict = {}
 
 class ChatRequest(BaseModel):
-    query: str
-    time_window_mins: Optional[int] = 30
+    message: str
     image_base64: Optional[str] = None
+    session_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     answer: str
-    citations: list
+    session_id: str
 
 class ApiKeyResponse(BaseModel):
     key: str
@@ -242,18 +243,20 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
 async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     try:
         tenant_id = current_user.get("user_id")
+        session_id = request.session_id if request.session_id else str(uuid.uuid4())
         
-        # Save user message to history
+        # 1. Store User Message
         store_chat_message(
             tenant_id=tenant_id,
+            session_id=session_id,
             role="user",
-            content=request.query,
+            content=request.message,
             image_base64=request.image_base64
         )
         
         result = engine.run_query(
-            query=request.query,
-            time_window_mins=request.time_window_mins,
+            query=request.message,
+            time_window_mins=30,
             image_base64=request.image_base64
         )
         
@@ -262,24 +265,152 @@ async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(get_c
         # Save assistant response to history
         store_chat_message(
             tenant_id=tenant_id,
+            session_id=session_id,
             role="assistant",
             content=answer
         )
         
         return ChatResponse(
             answer=answer,
-            citations=result.get("citations", [])
+            session_id=session_id
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/chat/history")
-def get_chat_history_endpoint(current_user: dict = Depends(get_current_user)):
+def get_chat_history_endpoint(session_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     try:
         tenant_id = current_user.get("user_id")
-        return get_chat_history(tenant_id)
+        return get_chat_history(tenant_id, session_id=session_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chat/sessions")
+def get_chat_sessions_endpoint(current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_id = current_user.get("user_id")
+        return get_chat_sessions(tenant_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/chat/history")
+def delete_chat_history_endpoint(session_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_id = current_user.get("user_id")
+        delete_chat_history(tenant_id, session_id=session_id)
+        return {"status": "success", "message": "Chat history deleted."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class VoiceRequest(BaseModel):
+    audio_base64: str
+
+@app.post("/api/chat/voice")
+async def chat_voice_endpoint(request: VoiceRequest, current_user: dict = Depends(get_current_user)):
+    try:
+        import speech_recognition as sr
+        import base64
+        import tempfile
+        import os
+        import subprocess
+
+        # Decode base64
+        audio_data = base64.b64decode(request.audio_base64)
+        
+        # Write to temp file (could be webm)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_in:
+            temp_in.write(audio_data)
+            temp_in_path = temp_in.name
+            
+        temp_out_path = temp_in_path.replace(".webm", ".wav")
+        
+        # Use ffmpeg to convert to wav (SpeechRecognition requires WAV)
+        try:
+            subprocess.run(["ffmpeg", "-y", "-i", temp_in_path, temp_out_path], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            # Fallback if ffmpeg isn't installed: try reading directly (works if browser sent WAV natively)
+            import shutil
+            shutil.copy(temp_in_path, temp_out_path)
+
+        recognizer = sr.Recognizer()
+        with sr.AudioFile(temp_out_path) as source:
+            audio = recognizer.record(source)
+            
+        text = recognizer.recognize_google(audio)
+        
+        # Cleanup
+        try:
+            os.remove(temp_in_path)
+            os.remove(temp_out_path)
+        except:
+            pass
+            
+        return {"text": text}
+    except sr.UnknownValueError:
+        raise HTTPException(status_code=400, detail="Could not understand audio")
+    except sr.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Speech recognition service error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# In-memory SaaS Connection store
+integrations_store = {}
+
+def fetch_latest_github_deployment(tenant_id: str) -> Optional[dict]:
+    """Fetches the latest commit from the tenant's most recently updated repository using their PAT."""
+    try:
+        tenant_data = integrations_store.get(tenant_id, {})
+        if not tenant_data.get("github"):
+            return None # GitHub not connected
+            
+        creds = tenant_data.get("credentials", {}).get("github", {})
+        pat = creds.get("pat")
+        if not pat:
+            return None
+            
+        headers = {
+            "Authorization": f"Bearer {pat}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        
+        # 1. Fetch most recently updated repo
+        repos_url = "https://api.github.com/user/repos?sort=updated&per_page=1"
+        repos_res = requests.get(repos_url, headers=headers)
+        if repos_res.status_code != 200:
+            print(f"Failed to fetch repos: {repos_res.text}")
+            return None
+            
+        repos = repos_res.json()
+        if not repos:
+            return None
+            
+        latest_repo = repos[0]
+        repo_full_name = latest_repo["full_name"]
+        
+        # 2. Fetch latest commit from this repo
+        commits_url = f"https://api.github.com/repos/{repo_full_name}/commits?per_page=1"
+        commits_res = requests.get(commits_url, headers=headers)
+        if commits_res.status_code != 200:
+            print(f"Failed to fetch commits: {commits_res.text}")
+            return None
+            
+        commits = commits_res.json()
+        if not commits:
+            return None
+            
+        latest_commit = commits[0]
+        
+        return {
+            "commit_sha": latest_commit["sha"],
+            "commit_msg": latest_commit["commit"]["message"],
+            "author": latest_commit["commit"]["author"]["name"],
+            "repository": repo_full_name,
+            "timestamp": latest_commit["commit"]["author"]["date"],
+            "pr_url": latest_commit["html_url"] # link to commit
+        }
+    except Exception as e:
+        print(f"Error fetching github deployment: {e}")
+        return None
 
 # --- Telemetry Ingress Models ---
 class UniversalEvent(BaseModel):
@@ -406,7 +537,7 @@ def ingest_telemetry(event: NexusEvent, current_user: dict = Depends(get_current
         else:
             # --- 2. Predictive Pipeline ---
             # Fetch recent logs for analyzing trends
-            recent_logs = get_logs(tenant_id, limit=50)
+            recent_logs = db_get_logs(tenant_id, limit=50)
             
             # Evaluate using predictive heuristics
             is_anomaly, prediction = predictive_engine.analyze_logs_and_predict(recent_logs)
@@ -415,8 +546,11 @@ def ingest_telemetry(event: NexusEvent, current_user: dict = Depends(get_current
                 current_score = get_reliability_score(tenant_email)
                 update_reliability_score(tenant_email, current_score - 2.0)
 
-                # Correlate with recent GitHub Deployment
-                latest_deploy = get_latest_deployment(tenant_id)
+                # Correlate with recent GitHub Deployment using PAT
+                latest_deploy = fetch_latest_github_deployment(tenant_id)
+                if not latest_deploy:
+                    # Fallback to webhooks if available
+                    latest_deploy = get_latest_deployment(tenant_id)
 
                 # Generate AI-assisted Predictive RCA
                 rca_details = predictive_engine.generate_predictive_rca(prediction, latest_deploy)
@@ -570,18 +704,239 @@ def generate_incident_rca(incident_id: str, current_user: dict = Depends(get_cur
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+github_deployments_cache = {}
+github_repo_workflow_cache = {}
+notified_failed_workflows = set()
+
+def auto_diagnose_and_notify_pipeline(current_user: dict, pat: str, repo_name: str, workflow_run_id: str):
+    """Background task to diagnose pipeline failure and send email."""
+    try:
+        headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+        jobs_url = f"https://api.github.com/repos/{repo_name}/actions/runs/{workflow_run_id}/jobs"
+        jobs_res = requests.get(jobs_url, headers=headers)
+        if jobs_res.status_code != 200: return
+            
+        jobs = jobs_res.json().get("jobs", [])
+        failed_job = next((job for job in jobs if job.get("conclusion") == "failure"), None)
+        if not failed_job: return
+            
+        job_id = failed_job["id"]
+        logs_url = f"https://api.github.com/repos/{repo_name}/actions/jobs/{job_id}/logs"
+        logs_res = requests.get(logs_url, headers=headers)
+        if logs_res.status_code != 200: return
+            
+        raw_logs = logs_res.text
+        log_snippet = raw_logs[-3000:]
+        diagnosis_query = f"The GitHub Actions pipeline '{failed_job['name']}' in repository '{repo_name}' failed. Analyze these logs and predict the exact root cause and an accurate solution:\n\n{log_snippet}"
+        
+        ai_result = engine.run_query(diagnosis_query, time_window_mins=60)
+        diagnosis = ai_result.get("answer", "Analysis failed.")
+        
+        # Send Email
+        notifications.notify_pipeline_failure(
+            tenant_email=current_user.get("email"),
+            repository=repo_name,
+            job_name=failed_job["name"],
+            raw_logs=log_snippet,
+            ai_diagnosis=diagnosis,
+            full_name=current_user.get("full_name", "")
+        )
+    except Exception as e:
+        print(f"Background diagnostic error: {e}")
+
+
 @app.get("/api/v1/github/deployments")
-def get_github_deployments(current_user: dict = Depends(get_current_user)):
+def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
     """Retrieves deployment logs for the authenticated tenant."""
     try:
         tenant_id = current_user.get("user_id")
+        
+        # Check cache
+        current_time = time.time()
+        cache_key = f"github_deployments_{tenant_id}"
+        if cache_key in github_deployments_cache:
+            cache_entry = github_deployments_cache[cache_key]
+            if current_time - cache_entry['time'] < 10:  # 10 second TTL
+                return cache_entry['data']
+
         table = get_deployments_table()
         response = table.query(
             KeyConditionExpression=Key('tenant_id').eq(tenant_id),
             ScanIndexForward=False,
             Limit=50
         )
-        return response.get('Items', [])
+        db_items = response.get('Items', [])
+        
+        # Merge live deployments from PAT if available
+        tenant_data = integrations_store.get(tenant_id, {})
+        pat = tenant_data.get("credentials", {}).get("github", {}).get("pat")
+        
+        if pat:
+            headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+            # Fetch up to 50 owned repos and up to 50 other repos to guarantee PAT's own repos are always visible
+            repos = []
+            
+            # 1. Owned Repositories
+            owner_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50&affiliation=owner", headers=headers)
+            if owner_res.status_code == 200:
+                repos.extend(owner_res.json())
+                
+            # 2. Organization & Collaborator Repositories
+            other_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50&affiliation=collaborator,organization_member", headers=headers)
+            if other_res.status_code == 200:
+                repos.extend(other_res.json())
+                
+            if repos:
+                for repo in repos:
+                    repo_name = repo.get("full_name")
+                    if not repo_name: continue
+                    
+                    repo_updated_at = repo.get("updated_at", "")
+                    cache_key_repo = f"{tenant_id}_{repo_name}"
+                    
+                    # Check smart per-repo cache
+                    if cache_key_repo in github_repo_workflow_cache:
+                        cached_entry = github_repo_workflow_cache[cache_key_repo]
+                        if cached_entry["updated_at"] == repo_updated_at:
+                            db_items.append(cached_entry["db_item"])
+                            continue
+                            
+                    # Fetch latest workflow run if cache miss or repo was updated
+                    runs_url = f"https://api.github.com/repos/{repo_name}/actions/runs?per_page=1"
+                    runs_res = requests.get(runs_url, headers=headers)
+                    db_item = None
+                    if runs_res.status_code == 200:
+                        runs_data = runs_res.json()
+                        runs = runs_data.get("workflow_runs", [])
+                        if runs:
+                            run = runs[0]
+                            db_item = {
+                                "commit_sha": run.get("head_sha", ""),
+                                "commit_msg": run.get("head_commit", {}).get("message", "Commit"),
+                                "author": run.get("head_commit", {}).get("author", {}).get("name", "Unknown"),
+                                "repository": repo_name,
+                                "timestamp": run.get("updated_at", run.get("created_at", "")),
+                                "workflow_run_id": str(run.get("id", "")),
+                                "status": run.get("status"),
+                                "conclusion": run.get("conclusion")
+                            }
+                        else:
+                            # Fallback to commit if no workflow runs exist
+                            commits_url = f"https://api.github.com/repos/{repo_name}/commits?per_page=1"
+                            commits_res = requests.get(commits_url, headers=headers)
+                            if commits_res.status_code == 200:
+                                commits = commits_res.json()
+                                if commits and isinstance(commits, list) and len(commits) > 0:
+                                    commit = commits[0]
+                                    db_item = {
+                                        "commit_sha": commit.get("sha", ""),
+                                        "commit_msg": commit.get("commit", {}).get("message", "Commit"),
+                                        "author": commit.get("commit", {}).get("author", {}).get("name", "Unknown"),
+                                        "repository": repo_name,
+                                        "timestamp": commit.get("commit", {}).get("author", {}).get("date", ""),
+                                        "workflow_run_id": "PAT_SYNC",
+                                        "status": "completed",
+                                        "conclusion": "success"
+                                    }
+                    
+                    if not db_item:
+                        db_item = {
+                            "commit_sha": "N/A",
+                            "commit_msg": "No pipeline data or repository is empty.",
+                            "author": "-",
+                            "repository": repo_name,
+                            "timestamp": repo_updated_at,
+                            "workflow_run_id": "PAT_SYNC",
+                            "status": "completed",
+                            "conclusion": "success"
+                        }
+                    if db_item:
+                        github_repo_workflow_cache[cache_key_repo] = {
+                            "updated_at": repo_updated_at,
+                            "db_item": db_item
+                        }
+                        db_items.append(db_item)
+                        
+                        # Trigger background diagnosis if pipeline failed and hasn't been notified yet
+                        if db_item.get("conclusion") == "failure" and db_item.get("workflow_run_id") != "PAT_SYNC":
+                            run_id = db_item.get("workflow_run_id")
+                            if run_id not in notified_failed_workflows:
+                                notified_failed_workflows.add(run_id)
+                                background_tasks.add_task(
+                                    auto_diagnose_and_notify_pipeline, 
+                                    current_user, 
+                                    pat, 
+                                    repo_name, 
+                                    run_id
+                                )
+                            
+        # Sort combined items by timestamp descending
+        db_items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        
+        # Save to main 10s cache
+        github_deployments_cache[cache_key] = {'time': current_time, 'data': db_items}
+        
+        return db_items
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class DiagnoseRequest(BaseModel):
+    repository: str
+    workflow_run_id: str
+
+@app.post("/api/v1/github/diagnose")
+def diagnose_github_pipeline(req: DiagnoseRequest, current_user: dict = Depends(get_current_user)):
+    """Fetches failed workflow logs and generates an AI diagnosis."""
+    try:
+        tenant_id = current_user.get("user_id")
+        tenant_data = integrations_store.get(tenant_id, {})
+        pat = tenant_data.get("credentials", {}).get("github", {}).get("pat")
+        
+        if not pat:
+            raise HTTPException(status_code=400, detail="GitHub PAT not found")
+            
+        headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+        
+        # 1. Get Jobs for the Workflow Run
+        jobs_url = f"https://api.github.com/repos/{req.repository}/actions/runs/{req.workflow_run_id}/jobs"
+        jobs_res = requests.get(jobs_url, headers=headers)
+        if jobs_res.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch jobs for workflow")
+            
+        jobs = jobs_res.json().get("jobs", [])
+        failed_job = next((job for job in jobs if job.get("conclusion") == "failure"), None)
+        
+        if not failed_job:
+            return {"diagnosis": "No failed jobs found in this workflow run."}
+            
+        job_id = failed_job["id"]
+        
+        # 2. Get Logs for the failed Job
+        logs_url = f"https://api.github.com/repos/{req.repository}/actions/jobs/{job_id}/logs"
+        logs_res = requests.get(logs_url, headers=headers)
+        
+        if logs_res.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to download job logs. Ensure PAT has 'actions:read' permission.")
+            
+        raw_logs = logs_res.text
+        
+        # 3. Analyze Logs with RAG Engine
+        # Limit logs to last 3000 chars to avoid token limits
+        log_snippet = raw_logs[-3000:]
+        
+        diagnosis_query = f"The GitHub Actions pipeline '{failed_job['name']}' in repository '{req.repository}' failed. Analyze these logs and predict the exact root cause and an accurate solution:\n\n{log_snippet}"
+        
+        ai_result = engine.run_query(diagnosis_query, time_window_mins=60)
+        diagnosis = ai_result.get("answer", "Analysis failed.")
+        
+        return {
+            "status": "success",
+            "job_name": failed_job["name"],
+            "diagnosis": diagnosis,
+            "raw_logs": log_snippet
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -619,7 +974,7 @@ def get_service_metrics(current_user: dict = Depends(get_current_user)):
     """Compiles service-specific telemetry indicators."""
     try:
         tenant_id = current_user.get("user_id")
-        logs = get_logs(tenant_id, limit=100)
+        logs = db_get_logs(tenant_id, limit=100)
         
         # Aggregate heuristics per service
         metrics = {}

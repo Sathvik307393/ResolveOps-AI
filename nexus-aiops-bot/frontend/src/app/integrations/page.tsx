@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
-import { GitBranch, Cpu, Database, Activity, Key, Server, Layers, AppWindow } from "lucide-react";
+import { GitBranch, Cpu, Database, Activity, Key, Server, Layers, AppWindow, Eye, EyeOff, CheckCircle } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
 interface IntegrationsState {
@@ -26,6 +26,7 @@ export default function IntegrationsManager() {
   const [activeModal, setActiveModal] = useState<"github" | "eks" | "aks" | "aws_ec2" | "azure_vm" | "azure_vmss" | "azure_app_service" | null>(null);
   
   // Modal Fields
+  const [githubPat, setGithubPat] = useState("");
   const [awsRole, setAwsRole] = useState("");
   const [awsRegion, setAwsRegion] = useState("us-east-1");
   const [azureTenant, setAzureTenant] = useState("");
@@ -73,6 +74,7 @@ export default function IntegrationsManager() {
       }
       setActiveModal(null);
       // Reset inputs
+      setGithubPat("");
       setAwsRole("");
       setAzureSecret("");
       setGithubRepo("");
@@ -149,7 +151,19 @@ export default function IntegrationsManager() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col h-full space-y-6 font-sans pb-10">
+      <div className="flex flex-col h-full space-y-6 font-sans pb-10 relative">
+        
+        {/* Success Toast */}
+        <div className={`fixed top-6 right-6 z-50 transition-all duration-300 transform ${successToast.show ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"}`}>
+          <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl shadow-lg flex items-center gap-3 backdrop-blur-md">
+            <CheckCircle size={20} />
+            <div>
+              <h4 className="font-bold text-sm">{successToast.title}</h4>
+              <p className="text-xs text-emerald-400/80">{successToast.message}</p>
+            </div>
+          </div>
+        </div>
+
         <div>
           <h2 className="text-xl font-bold tracking-wide text-white">Central Connections & Integrations</h2>
           <p className="text-sm text-slate-500 mt-1">
@@ -313,13 +327,22 @@ export default function IntegrationsManager() {
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Client Secret</label>
-                  <input
-                    type="password"
-                    value={azureSecret}
-                    onChange={(e) => setAzureSecret(e.target.value)}
-                    placeholder="••••••••••••••••"
-                    className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showAzureSecret ? "text" : "password"}
+                      value={azureSecret}
+                      onChange={(e) => setAzureSecret(e.target.value)}
+                      placeholder="••••••••••••••••"
+                      className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 pr-10 text-xs font-mono focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAzureSecret(!showAzureSecret)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    >
+                      {showAzureSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-850">

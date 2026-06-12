@@ -18,8 +18,8 @@ class LogRageEngine:
         )
         self.chat_model = ChatBedrock(
             client=bedrock_client,
-            model_id=os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0"),
-            model_kwargs={"temperature": 0.1}
+            model_id=os.getenv("BEDROCK_MODEL_ID", "meta.llama3-3-70b-instruct-v1:0"),
+            model_kwargs={"temperature": 0.1, "max_tokens": 4096}
         )
         self.vector_store = None
 
@@ -66,9 +66,14 @@ class LogRageEngine:
             "3. Act as a powerful automation tool: Write code, generate complete automation scripts, CI/CD pipelines, and infrastructure-as-code snippets when requested.\n"
             "4. Facilitate communication: If the user asks to 'send an email' or alert someone, provide the exact Python script (using smtplib or boto3 SES) or bash/curl command needed to automate that task immediately.\n"
             "5. **Interactive Diagram Generation**: If the user asks to draw, generate, design, or sketch an architecture diagram, you MUST output a valid JSON containing the diagram shapes inside a fenced code block marked with language 'excalidraw'.\n"
+            "   CRITICAL RULES FOR JSON OUTPUT:\n"
+            "   - Output ONLY the JSON block. Do not output conversational text outside the block.\n"
+            "   - Ensure strict RFC-8259 JSON compliance. DO NOT include trailing commas under any circumstances.\n"
             "   The JSON schema structure MUST follow this exact pattern:\n"
             "   {{\n"
             "     \"type\": \"excalidraw\",\n"
+            "     \"version\": 2,\n"
+            "     \"source\": \"https://excalidraw.com\",\n"
             "     \"elements\": [\n"
             "       {{\n"
             "         \"id\": \"unique_id_1\",\n"
@@ -91,16 +96,6 @@ class LogRageEngine:
             "         \"text\": \"ALB Ingress\",\n"
             "         \"fontSize\": 16,\n"
             "         \"fontFamily\": 1\n"
-            "       }},\n"
-            "       {{\n"
-            "         \"id\": \"unique_id_3\",\n"
-            "         \"type\": \"arrow\",\n"
-            "         \"x\": 175,\n"
-            "         \"y\": 180,\n"
-            "         \"points\": [[0,0], [0,80]],\n"
-            "         \"strokeColor\": \"#fbbf24\",\n"
-            "         \"strokeWidth\": 2,\n"
-            "         \"roughness\": 1\n"
             "       }}\n"
             "     ]\n"
             "   }}\n"

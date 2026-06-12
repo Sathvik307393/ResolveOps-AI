@@ -286,7 +286,7 @@ def get_latest_deployment(tenant_id: str) -> Optional[dict]:
         return None
 
 # --- Chat History Management (with Local Fallback) ---
-def store_chat_message(tenant_id: str, role: str, content: str, image_base64: Optional[str] = None) -> bool:
+def store_chat_message(tenant_id: str, session_id: str, role: str, content: str, image_base64: Optional[str] = None) -> bool:
     """Saves a single message in the chat history repository."""
     timestamp = datetime.datetime.utcnow().isoformat() + "Z"
     try:
@@ -294,6 +294,7 @@ def store_chat_message(tenant_id: str, role: str, content: str, image_base64: Op
         table.put_item(Item={
             'tenant_id': tenant_id,
             'timestamp': timestamp,
+            'session_id': session_id,
             'role': role,
             'content': content,
             'image_base64': image_base64
@@ -311,11 +312,12 @@ def store_chat_message(tenant_id: str, role: str, content: str, image_base64: Op
         history.append({
             'tenant_id': tenant_id,
             'timestamp': timestamp,
+            'session_id': session_id,
             'role': role,
             'content': content,
             'image_base64': image_base64
         })
-        history = history[-300:] # Cap storage history size
+        history = history[-1000:] # Cap storage history size
         with open(local_path, "w") as f:
             json.dump(history, f, indent=2)
         return True
@@ -323,16 +325,58 @@ def store_chat_message(tenant_id: str, role: str, content: str, image_base64: Op
         print(f"Local Chat History write failed: {local_ex}")
         return False
 
-def get_chat_history(tenant_id: str, limit: int = 50) -> list:
-    """Retrieves the message logs for a given tenant."""
+def get_chat_sessions(tenant_id: str) -> list:
+    """Retrieves all unique sessions for a tenant, returning the latest timestamp and title."""
+    try:
+        table = get_chat_history_table()
+        response = table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('tenant_id').eq(tenant_id)
+        )
+        items = response.get('Items', [])
+    except Exception as e:
+        items = []
+        local_path = "local_chat_history.json"
+        if os.path.exists(local_path):
+            try:
+                with open(local_path, "r") as f:
+                    history = json.load(f)
+                items = [msg for msg in history if msg.get('tenant_id') == tenant_id]
+            except:
+                pass
+                
+    sessions = {}
+    for item in items:
+        sid = item.get('session_id', 'default')
+        if sid not in sessions:
+            sessions[sid] = {
+                "session_id": sid,
+                "timestamp": item['timestamp'],
+                "title": item['content'][:50] + "..." if item['role'] == 'user' else "New Chat",
+                "message_count": 1
+            }
+        else:
+            sessions[sid]["message_count"] += 1
+            if item['role'] == 'user' and sessions[sid]["title"] == "New Chat":
+                sessions[sid]["title"] = item['content'][:50] + "..."
+            if item['timestamp'] > sessions[sid]["timestamp"]:
+                sessions[sid]["timestamp"] = item['timestamp']
+                
+    # Return as list sorted by latest timestamp descending
+    return sorted(list(sessions.values()), key=lambda x: x['timestamp'], reverse=True)
+
+def get_chat_history(tenant_id: str, session_id: str = None, limit: int = 50) -> list:
+    """Retrieves the message logs for a given tenant and session."""
     try:
         table = get_chat_history_table()
         response = table.query(
             KeyConditionExpression=boto3.dynamodb.conditions.Key('tenant_id').eq(tenant_id),
             ScanIndexForward=True, # Oldest first so it renders in correct chronological order
-            Limit=limit
+            Limit=limit * 2 # To account for session filtering
         )
-        return response.get('Items', [])
+        items = response.get('Items', [])
+        if session_id:
+            items = [i for i in items if i.get('session_id', 'default') == session_id]
+        return items[-limit:]
     except Exception as e:
         print(f"DynamoDB Chat History read failed: {e}. Falling back to local file.")
         
@@ -342,11 +386,54 @@ def get_chat_history(tenant_id: str, limit: int = 50) -> list:
             with open(local_path, "r") as f:
                 history = json.load(f)
             tenant_history = [msg for msg in history if msg.get('tenant_id') == tenant_id]
+            if session_id:
+                tenant_history = [msg for msg in tenant_history if msg.get('session_id', 'default') == session_id]
             return tenant_history[-limit:]
         return []
     except Exception as local_ex:
         print(f"Local Chat History read failed: {local_ex}")
         return []
+
+def delete_chat_history(tenant_id: str, session_id: str = None) -> bool:
+    """Deletes all message logs for a given tenant."""
+    try:
+        table = get_chat_history_table()
+        # Query to get all items
+        response = table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('tenant_id').eq(tenant_id)
+        )
+        items = response.get('Items', [])
+        if session_id:
+            items = [i for i in items if i.get('session_id', 'default') == session_id]
+            
+        with table.batch_writer() as batch:
+            for item in items:
+                batch.delete_item(
+                    Key={
+                        'tenant_id': item['tenant_id'],
+                        'timestamp': item['timestamp']
+                    }
+                )
+    except Exception as e:
+        print(f"DynamoDB Chat History delete failed: {e}. Attempting local file.")
+        
+    try:
+        local_path = "local_chat_history.json"
+        if os.path.exists(local_path):
+            with open(local_path, "r") as f:
+                history = json.load(f)
+                
+            if session_id:
+                history = [msg for msg in history if not (msg.get('tenant_id') == tenant_id and msg.get('session_id', 'default') == session_id)]
+            else:
+                history = [msg for msg in history if msg.get('tenant_id') != tenant_id]
+                
+            with open(local_path, "w") as f:
+                json.dump(history, f, indent=2)
+        return True
+    except Exception as local_ex:
+        print(f"Local Chat History delete failed: {local_ex}")
+        return False
 
 # --- Predictive Risks Management ---
 def store_predictive_risk(tenant_id: str, risk_data: dict) -> bool:

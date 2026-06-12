@@ -211,3 +211,42 @@ def notify_predictive_alert(
     subject = f"[PREDICTIVE ALERT] Impending failure forecasted for {service}"
     return _send_smtp(tenant_email, subject, _html_wrapper("Proactive Incident Prevention Alert", body))
 
+def notify_pipeline_failure(
+    tenant_email: str,
+    repository: str,
+    job_name: str,
+    raw_logs: str,
+    ai_diagnosis: str,
+    full_name: str = ""
+) -> bool:
+    """Sends a detailed email containing the AI's diagnosis of a failed pipeline."""
+    first_name = full_name.split()[0] if full_name else "Engineer"
+    
+    # Format the AI diagnosis to handle line breaks gracefully in HTML
+    formatted_diagnosis = ai_diagnosis.replace("\n", "<br>")
+    
+    body = f"""
+        <p>Hi <strong>{first_name}</strong>,</p>
+        <p style="color:#f43f5e; font-weight:600; font-size:15px;">❌ Pipeline Execution Failed</p>
+        <p>Nexus AI has detected a failure in your CI/CD pipeline and has automatically diagnosed the root cause.</p>
+        
+        <div class="card">
+          <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+            <tr><td style="color:#64748b; padding: 6px 0; font-size:13px; width:140px;">Repository</td><td style="color:#f1f5f9; font-weight:600; font-size:13px;">{repository}</td></tr>
+            <tr><td style="color:#64748b; padding: 6px 0; font-size:13px;">Failed Job</td><td style="color:#f87171; font-weight:600; font-size:13px;">{job_name}</td></tr>
+          </table>
+        </div>
+
+        <div class="card" style="background:#0f172a; border-left:4px solid #6366f1;">
+          <h4 style="margin:0 0 8px 0; color:#818cf8; font-size:14px;">🤖 Nexus AI Root Cause & Prediction</h4>
+          <p style="margin:0; font-size:13px; color:#e2e8f0; line-height:1.5;">{formatted_diagnosis}</p>
+        </div>
+
+        <h3 style="color:#f1f5f9; font-size:14px; margin-top:20px;">Raw Log Snippet</h3>
+        <pre>{raw_logs}</pre>
+
+        <a href="{DASHBOARD_URL}/github" class="btn">View Dashboard →</a>
+    """
+    subject = f"[Failed] Pipeline Error Detected in {repository}"
+    return _send_smtp(tenant_email, subject, _html_wrapper("Automated Pipeline Diagnosis", body))
+

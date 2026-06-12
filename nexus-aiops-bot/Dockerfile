@@ -5,8 +5,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install curl
-RUN apt-get update && apt-get install -y curl
+# Install curl and ffmpeg
+RUN apt-get update && apt-get install -y curl ffmpeg
 
 COPY . .
 
