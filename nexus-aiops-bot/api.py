@@ -868,8 +868,7 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                                         current_user, 
                                         pat, 
                                         item.get("repository"), 
-                                        run_id, 
-                                        item
+                                        run_id
                                     )
                             
         # Sort combined items by timestamp descending
