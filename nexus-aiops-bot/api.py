@@ -17,7 +17,7 @@ import requests
 
 from database import (
     init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table,
-    store_log, get_logs, update_reliability_score, get_reliability_score, store_deployment, get_latest_deployment,
+    get_deployments_table, store_log, get_logs, update_reliability_score, get_reliability_score, store_deployment, get_latest_deployment,
     store_chat_message, get_chat_history, get_predictive_risks,
     update_user_integrations, get_user_integrations
 )
