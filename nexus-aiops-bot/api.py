@@ -880,15 +880,15 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                                 # Trigger background diagnosis if pipeline failed and hasn't been notified yet
                                 if item.get("conclusion") == "failure" and item.get("workflow_run_id") != "PAT_SYNC":
                                     run_id = item.get("workflow_run_id")
-                                if run_id not in notified_failed_workflows:
-                                    notified_failed_workflows.add(run_id)
-                                    background_tasks.add_task(
-                                        auto_diagnose_and_notify_pipeline, 
-                                        current_user, 
-                                        pat, 
-                                        item.get("repository"), 
-                                        run_id
-                                    )
+                                    if run_id not in notified_failed_workflows:
+                                        notified_failed_workflows.add(run_id)
+                                        background_tasks.add_task(
+                                            auto_diagnose_and_notify_pipeline, 
+                                            current_user, 
+                                            pat, 
+                                            item.get("repository"), 
+                                            run_id
+                                        )
                             
         # Sort combined items by timestamp descending
         db_items.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
