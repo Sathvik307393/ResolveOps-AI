@@ -33,6 +33,7 @@ export default function IntegrationsManager() {
   const [azureTenant, setAzureTenant] = useState("");
   const [azureClient, setAzureClient] = useState("");
   const [azureSecret, setAzureSecret] = useState("");
+  const [showAzureSecret, setShowAzureSecret] = useState(false);
   const [githubRepo, setGithubRepo] = useState("");
   const [githubToken, setGithubToken] = useState("");
 
