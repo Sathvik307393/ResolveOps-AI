@@ -170,7 +170,6 @@ class LogRageEngine:
         if "email" in query.lower() and tenant_email:
             try:
                 import sys
-                import os
                 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
                 from email_service import send_cloud_analysis_email
                 
