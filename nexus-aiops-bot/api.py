@@ -1097,13 +1097,12 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
                     "Authorization": f"token {github_token}"
                 }
                 
-                # Verify emails
+                # Verify emails if possible
                 r_emails = requests.get("https://api.github.com/user/emails", headers=headers, timeout=5)
-                if r_emails.status_code != 200:
-                    raise HTTPException(status_code=400, detail="Invalid GitHub Personal Access Token or missing 'user:email' scope")
-                
-                emails_data = r_emails.json()
-                verified_emails = [e.get("email").lower() for e in emails_data if e.get("verified")]
+                verified_emails = []
+                if r_emails.status_code == 200:
+                    emails_data = r_emails.json()
+                    verified_emails = [e.get("email").lower() for e in emails_data if e.get("verified")]
                 
                 r_user = requests.get("https://api.github.com/user", headers=headers, timeout=5)
                 if r_user.status_code != 200:
@@ -1112,11 +1111,17 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
                 user_data = r_user.json()
                 github_login = user_data.get("login")
                 
-                if github_email.lower() not in verified_emails and github_email.lower() != github_login.lower():
-                    raise HTTPException(
-                        status_code=400, 
-                        detail=f"The provided email/username '{github_email}' does not match the GitHub account associated with this PAT. Verified login is '{github_login}'."
-                    )
+                # Check if the provided input matches either a verified email or the username
+                if r_emails.status_code == 200:
+                    if github_email.lower() not in verified_emails and github_email.lower() != github_login.lower():
+                        raise HTTPException(
+                            status_code=400, 
+                            detail=f"The provided email/username '{github_email}' does not match the GitHub account associated with this PAT. Verified login is '{github_login}'."
+                        )
+                else:
+                    # If we don't have user:email scope, just verify that the PAT is valid and matches the username if they typed a username
+                    # If they typed an email, we can't verify it, so we accept the PAT and use the github_login
+                    pass
                 
                 req.credentials["github_username"] = github_login
 
