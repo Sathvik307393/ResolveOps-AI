@@ -11,7 +11,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [sessions, setSessions] = useState<any[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [integrations, setIntegrations] = useState<any>({ github: false, eks: false, aks: false, aws_ec2: false, azure_vm: false, azure_vmss: false, azure_app_service: false });
+  const [integrations, setIntegrations] = useState<any>({ github: false, aws: false, azure: false });
 
   const loadHistory = () => {
     const token = typeof window !== 'undefined' && localStorage.getItem("jwt_token");
@@ -54,12 +54,7 @@ export default function Sidebar() {
   };
 
   const navItems = [
-    { name: "Dashboard", path: "/", icon: LayoutDashboard },
-    ...(integrations.eks || integrations.aks ? [{ name: "K8s Explorer", path: "/kubernetes", icon: Cpu }] : []),
-    ...(integrations.aws_ec2 ? [{ name: "AWS EC2 Explorer", path: "/aws/ec2", icon: Server }] : []),
-    ...(integrations.azure_vm ? [{ name: "Azure VM Explorer", path: "/azure/vm", icon: Server }] : []),
-    ...(integrations.azure_vmss ? [{ name: "Azure VMSS Explorer", path: "/azure/vmss", icon: Layers }] : []),
-    ...(integrations.azure_app_service ? [{ name: "App Service Explorer", path: "/azure/app-service", icon: AppWindow }] : []),
+    { name: "Cloud Resources", path: "/", icon: LayoutDashboard },
     ...(integrations.github ? [{ name: "GitHub Sync", path: "/github", icon: GitBranch }] : []),
     { name: "AI Copilot", path: "/chat", icon: MessageSquareCode },
     { name: "Suggestions", path: "/suggestions", icon: Lightbulb },

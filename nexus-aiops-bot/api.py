@@ -243,6 +243,7 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
 async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     try:
         tenant_id = current_user.get("user_id")
+        tenant_email = current_user.get("email")
         session_id = request.session_id if request.session_id else str(uuid.uuid4())
         
         # 1. Store User Message
@@ -254,10 +255,18 @@ async def chat_endpoint(request: ChatRequest, current_user: dict = Depends(get_c
             image_base64=request.image_base64
         )
         
+        # 2. Fetch cloud logs if any
+        cloud_logs = get_cloud_logs(current_user)
+        cloud_logs_str = None
+        if cloud_logs:
+            cloud_logs_str = "\n".join([f"[{l['timestamp']}] {l['resource_id']} - {l['level']}: {l['message']}" for l in cloud_logs])
+            
         result = engine.run_query(
             query=request.message,
             time_window_mins=30,
-            image_base64=request.image_base64
+            image_base64=request.image_base64,
+            cloud_logs_str=cloud_logs_str,
+            tenant_email=tenant_email
         )
         
         answer = result.get("answer", "")
@@ -1075,8 +1084,7 @@ def get_integrations(current_user: dict = Depends(get_current_user)):
         integrations = get_user_integrations(tenant_email)
         
         status_map = {
-            "github": False, "eks": False, "aks": False,
-            "aws_ec2": False, "azure_vm": False, "azure_vmss": False, "azure_app_service": False,
+            "github": False, "aws": False, "azure": False,
             "github_details": None
         }
         for k in list(status_map.keys()):
@@ -1142,10 +1150,8 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
             
         update_user_integrations(tenant_email, integrations)
         
-        # Build returned status map
         status_map = {
-            "github": False, "eks": False, "aks": False,
-            "aws_ec2": False, "azure_vm": False, "azure_vmss": False, "azure_app_service": False,
+            "github": False, "aws": False, "azure": False,
             "github_details": None
         }
         for k in list(status_map.keys()):
@@ -1240,6 +1246,86 @@ def get_github_workflow_status(current_user: dict = Depends(get_current_user)):
         return {"status": "success", "data": result}
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class CloudSelectRequest(BaseModel):
+    selected_ids: List[str]
+
+@app.get("/api/v1/cloud/resources")
+def get_cloud_resources(current_user: dict = Depends(get_current_user)):
+    """Mocks fetching available cloud resources from connected AWS/Azure accounts."""
+    try:
+        tenant_email = current_user.get("email")
+        integrations = get_user_integrations(tenant_email)
+        
+        resources = []
+        selected_ids = integrations.get("cloud_selections", [])
+        
+        if integrations.get("aws", {}).get("connected"):
+            resources.extend([
+                {"id": "aws-ec2-i-0abc1234567890def", "name": "production-api-server", "type": "EC2 Instance", "provider": "AWS", "region": "us-east-1", "status": "running"},
+                {"id": "aws-ec2-i-0987654321fedcba0", "name": "worker-node-1", "type": "EC2 Instance", "provider": "AWS", "region": "us-east-1", "status": "running"},
+                {"id": "aws-eks-prod-cluster", "name": "eks-prod-cluster", "type": "EKS Cluster", "provider": "AWS", "region": "us-east-1", "status": "active"},
+                {"id": "aws-s3-prod-assets", "name": "prod-static-assets", "type": "S3 Bucket", "provider": "AWS", "region": "us-east-1", "status": "active"}
+            ])
+            
+        if integrations.get("azure", {}).get("connected"):
+            resources.extend([
+                {"id": "azure-vm-frontend-01", "name": "frontend-web-vm", "type": "Virtual Machine", "provider": "Azure", "region": "eastus", "status": "running"},
+                {"id": "azure-aks-main", "name": "aks-primary-cluster", "type": "AKS Cluster", "provider": "Azure", "region": "eastus", "status": "running"},
+                {"id": "azure-sql-primary", "name": "prod-sql-database", "type": "SQL Database", "provider": "Azure", "region": "eastus", "status": "online"}
+            ])
+            
+        for r in resources:
+            r["selected"] = r["id"] in selected_ids
+            
+        return resources
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/cloud/resources/select")
+def select_cloud_resources(req: CloudSelectRequest, current_user: dict = Depends(get_current_user)):
+    """Saves selected cloud resources to the tenant's integration profile."""
+    try:
+        tenant_email = current_user.get("email")
+        integrations = get_user_integrations(tenant_email)
+        integrations["cloud_selections"] = req.selected_ids
+        update_user_integrations(tenant_email, integrations)
+        return {"status": "success", "message": "Cloud resources selected"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/cloud/logs")
+def get_cloud_logs(current_user: dict = Depends(get_current_user)):
+    """Fetches combined mocked logs for the currently selected cloud resources."""
+    try:
+        tenant_email = current_user.get("email")
+        integrations = get_user_integrations(tenant_email)
+        selected_ids = integrations.get("cloud_selections", [])
+        
+        if not selected_ids:
+            return []
+            
+        # Mock recent logs for the selected resources
+        import random
+        from datetime import datetime, timedelta
+        
+        logs = []
+        now = datetime.utcnow()
+        for idx in range(20):
+            res_id = random.choice(selected_ids)
+            level = random.choices(["INFO", "WARNING", "ERROR"], weights=[80, 15, 5])[0]
+            msg = f"Routine operational trace" if level == "INFO" else f"Memory threshold warning" if level == "WARNING" else f"Connection timed out"
+            logs.append({
+                "resource_id": res_id,
+                "timestamp": (now - timedelta(minutes=random.randint(1, 60))).isoformat() + "Z",
+                "level": level,
+                "message": f"{msg} for {res_id}"
+            })
+            
+        logs.sort(key=lambda x: x["timestamp"], reverse=True)
+        return logs
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

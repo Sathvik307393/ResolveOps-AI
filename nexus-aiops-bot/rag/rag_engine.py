@@ -23,7 +23,7 @@ class LogRageEngine:
         )
         self.vector_store = None
 
-    def run_query(self, query: str, time_window_mins: int = 30, image_base64: str = None) -> dict:
+    def run_query(self, query: str, time_window_mins: int = 30, image_base64: str = None, cloud_logs_str: str = None, tenant_email: str = None) -> dict:
         """Runs vector search on log indexes and performs root cause analysis with Bedrock model."""
 
         retrieved_logs = []
@@ -48,12 +48,20 @@ class LogRageEngine:
                     "citations": []
                 }
 
+        context_parts = []
         if retrieved_logs:
-            context_str = "\n".join([
+            local_str = "\n".join([
                 f"- [{log.get('timestamp', '')}] Service: {log.get('service', '')} | Level: {log.get('level', '')} | Message: {log.get('message', '')} "
                 f"| Status: {log.get('status_code', '')} | Latency: {log.get('latency_ms', '')}ms | ReqID: {log.get('request_id', '')}"
                 for log in retrieved_logs
             ])
+            context_parts.append(f"--- LOCAL INCIDENT LOGS ---\n{local_str}")
+            
+        if cloud_logs_str:
+            context_parts.append(f"--- ACTIVE CLOUD RESOURCES LOGS ---\n{cloud_logs_str}")
+            
+        if context_parts:
+            context_str = "\n\n".join(context_parts)
         else:
             context_str = "No specific incident logs found for this query in the specified time window."
 
@@ -64,7 +72,7 @@ class LogRageEngine:
             "1. Analyze operational logs, traces, and system metrics to identify incident root causes.\n"
             "2. Answer any general questions related to DevOps, AI, development, deployment, and security.\n"
             "3. Act as a powerful automation tool: Write code, generate complete automation scripts, CI/CD pipelines, and infrastructure-as-code snippets when requested.\n"
-            "4. Facilitate communication: If the user asks to 'send an email' or alert someone, provide the exact Python script (using smtplib or boto3 SES) or bash/curl command needed to automate that task immediately.\n"
+            "4. Facilitate communication: If the user asks to 'send an email' or alert someone, analyze the logs, generate an incident report, and state explicitly: 'I have dispatched the diagnostic report to your email.'\n"
             "5. **Interactive Diagram Generation**: If the user asks to draw, generate, design, or sketch an architecture diagram, you MUST output a valid JSON containing the diagram shapes inside a fenced code block marked with language 'excalidraw'.\n"
             "   CRITICAL RULES FOR JSON OUTPUT:\n"
             "   - Output ONLY the JSON block. Do not output conversational text outside the block.\n"
@@ -111,7 +119,7 @@ class LogRageEngine:
         )
 
         user_prompt = (
-            "Here is the context representing the retrieved logs from FAISS Vector Store (if any):\n"
+            "Here is the context representing the retrieved logs from FAISS Vector Store and your active cloud resources:\n"
             "---CONTEXT START---\n"
             "{context}\n"
             "---CONTEXT END---\n\n"
@@ -157,6 +165,22 @@ class LogRageEngine:
                 })
             except Exception as chat_ex:
                 answer = f"AI Error: Could not generate response. Details: {str(chat_ex)}"
+                
+        # Handle implicit email requests
+        if "email" in query.lower() and tenant_email:
+            try:
+                import sys
+                import os
+                sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                from email_service import send_cloud_analysis_email
+                
+                send_cloud_analysis_email(
+                    tenant_email=tenant_email,
+                    resource_ids=["Connected Cloud Resources"],
+                    analysis_report=answer
+                )
+            except Exception as e:
+                print(f"Failed to send email: {e}")
 
         return {
             "answer": answer,

@@ -3,32 +3,30 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
-import { GitBranch, Cpu, Database, Activity, Key, Server, Layers, AppWindow, Eye, EyeOff, CheckCircle } from "lucide-react";
+import { GitBranch, Server, Database, Activity, Key, Eye, EyeOff, CheckCircle, ArrowRight } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import Link from "next/link";
 
 interface IntegrationsState {
   github: boolean;
-  eks: boolean;
-  aks: boolean;
-  aws_ec2: boolean;
-  azure_vm: boolean;
-  azure_vmss: boolean;
-  azure_app_service: boolean;
+  aws: boolean;
+  azure: boolean;
 }
 
 export default function IntegrationsManager() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<IntegrationsState>({ 
-    github: false, eks: false, aks: false, aws_ec2: false, azure_vm: false, azure_vmss: false, azure_app_service: false
+    github: false, aws: false, azure: false
   });
   const [githubDetails, setGithubDetails] = useState<string | null>(null);
-  const [activeModal, setActiveModal] = useState<"github" | "eks" | "aks" | "aws_ec2" | "azure_vm" | "azure_vmss" | "azure_app_service" | null>(null);
+  const [activeModal, setActiveModal] = useState<"github" | "aws" | "azure" | null>(null);
   const [successToast, setSuccessToast] = useState({ show: false, title: "", message: "" });
   
   // Modal Fields
   const [githubPat, setGithubPat] = useState("");
-  const [awsRole, setAwsRole] = useState("");
+  const [awsAccessKey, setAwsAccessKey] = useState("");
+  const [awsSecretKey, setAwsSecretKey] = useState("");
   const [awsRegion, setAwsRegion] = useState("us-east-1");
   const [azureTenant, setAzureTenant] = useState("");
   const [azureClient, setAzureClient] = useState("");
@@ -41,7 +39,11 @@ export default function IntegrationsManager() {
     fetchApi("/api/v1/integrations")
       .then((data: any) => {
         if (data) {
-          setStatus(data);
+          setStatus({
+            github: !!data.github,
+            aws: !!data.aws,
+            azure: !!data.azure
+          });
           if (data.github_details) setGithubDetails(data.github_details);
         }
         setLoading(false);
@@ -69,7 +71,11 @@ export default function IntegrationsManager() {
         })
       });
       if (data?.integrations) {
-        setStatus(data.integrations);
+        setStatus({
+          github: !!data.integrations.github,
+          aws: !!data.integrations.aws,
+          azure: !!data.integrations.azure
+        });
         if (data.integrations.github_details !== undefined) {
           setGithubDetails(data.integrations.github_details);
         }
@@ -78,7 +84,7 @@ export default function IntegrationsManager() {
         const title = service === "github" ? "GitHub Connected" : "Connection Successful";
         const msg = service === "github" && data?.integrations?.github_details 
           ? `Successfully authenticated as ${data.integrations.github_details}` 
-          : `Successfully connected ${service} resource`;
+          : `Successfully connected top-level ${service.toUpperCase()} account`;
           
         setSuccessToast({ show: true, title, message: msg });
         setTimeout(() => setSuccessToast(prev => ({ ...prev, show: false })), 4000);
@@ -86,7 +92,8 @@ export default function IntegrationsManager() {
       setActiveModal(null);
       // Reset inputs
       setGithubPat("");
-      setAwsRole("");
+      setAwsAccessKey("");
+      setAwsSecretKey("");
       setAzureSecret("");
       setGithubEmail("");
       setGithubToken("");
@@ -154,7 +161,7 @@ export default function IntegrationsManager() {
               : "bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500"
           }`}
         >
-          {isConnected ? `Disconnect ${title}` : (modalKey ? "Configure Connection" : "Connect Now")}
+          {isConnected ? `Disconnect Account` : "Connect Account"}
         </button>
       </div>
     );
@@ -175,11 +182,18 @@ export default function IntegrationsManager() {
           </div>
         </div>
 
-        <div>
-          <h2 className="text-xl font-bold tracking-wide text-white">Central Connections & Integrations</h2>
-          <p className="text-sm text-slate-500 mt-1">
-            Securely link your cloud infrastructure and repository services to enable zero-code log streaming and autonomous event analysis.
-          </p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h2 className="text-xl font-bold tracking-wide text-white">Central Connections & Integrations</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Authenticate your cloud providers to unlock dynamic log streaming and autonomous event analysis.
+            </p>
+          </div>
+          {(status.aws || status.azure) && (
+            <Link href="/" className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors">
+              Manage Cloud Resources <ArrowRight size={16} />
+            </Link>
+          )}
         </div>
 
         <h3 className="text-sm font-semibold text-slate-300 mt-4 border-b border-slate-800 pb-2">Version Control</h3>
@@ -187,18 +201,10 @@ export default function IntegrationsManager() {
           {renderCard("github", "GitHub Integration", "Connect your source repositories to automatically log releases and capture workflow runs.", GitBranch, "text-indigo-400", "bg-indigo-400/10", "github")}
         </div>
 
-        <h3 className="text-sm font-semibold text-slate-300 mt-6 border-b border-slate-800 pb-2">AWS Resources</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {renderCard("eks", "AWS EKS Cluster", "Stream EKS container console logs directly from CloudWatch.", Cpu, "text-amber-400", "bg-amber-400/10", "aws")}
-          {renderCard("aws_ec2", "AWS EC2 Instances", "Monitor virtual machines and analyze system logs across EC2 instances.", Server, "text-orange-400", "bg-orange-400/10", "aws")}
-        </div>
-
-        <h3 className="text-sm font-semibold text-slate-300 mt-6 border-b border-slate-800 pb-2">Azure Resources</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {renderCard("aks", "Azure AKS Cluster", "Forward AKS container logs by providing service credentials.", Database, "text-sky-400", "bg-sky-400/10", "azure")}
-          {renderCard("azure_vm", "Azure Virtual Machines", "Link Azure VMs for deep log analysis and performance metrics.", Server, "text-blue-400", "bg-blue-400/10", "azure")}
-          {renderCard("azure_vmss", "Azure VM Scale Sets", "Monitor auto-scaling node groups and instance telemetry.", Layers, "text-cyan-400", "bg-cyan-400/10", "azure")}
-          {renderCard("azure_app_service", "Azure App Services", "Integrate web apps to capture application logs and traces.", AppWindow, "text-teal-400", "bg-teal-400/10", "azure")}
+        <h3 className="text-sm font-semibold text-slate-300 mt-6 border-b border-slate-800 pb-2">Cloud Infrastructure</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {renderCard("aws", "Amazon Web Services", "Connect your AWS account via Access Keys to dynamically fetch and monitor resources like EC2, S3, and EKS.", Server, "text-amber-400", "bg-amber-400/10", "aws")}
+          {renderCard("azure", "Microsoft Azure", "Connect your Azure tenant via Service Principal to monitor VMs, AKS, and App Services.", Database, "text-sky-400", "bg-sky-400/10", "azure")}
         </div>
 
         {/* GitHub Modal */}
@@ -262,28 +268,38 @@ export default function IntegrationsManager() {
         )}
 
         {/* AWS Modal */}
-        {(activeModal === "eks" || activeModal === "aws_ec2") && (
+        {activeModal === "aws" && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="glass-panel border border-slate-800 w-full max-w-md rounded-2xl overflow-hidden relative shadow-2xl p-6 space-y-4">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Key className="text-amber-400" /> Connect AWS {activeModal === "eks" ? "EKS" : "EC2"}
+                <Key className="text-amber-400" /> Connect AWS Account
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                NexusAI requires read-only permissions to poll CloudWatch. Create an IAM Role in your AWS console delegating access.
+                Provide AWS Access Keys to allow Nexus AI to dynamically fetch your EC2, EKS, and S3 resources and read CloudWatch logs.
               </p>
               <div className="space-y-3 pt-2">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">IAM Role ARN</label>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Access Key ID</label>
                   <input
                     type="text"
-                    value={awsRole}
-                    onChange={(e) => setAwsRole(e.target.value)}
-                    placeholder="arn:aws:iam::123456789012:role/NexusAccess"
+                    value={awsAccessKey}
+                    onChange={(e) => setAwsAccessKey(e.target.value)}
+                    placeholder="AKIAIOSFODNN7EXAMPLE"
                     className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none focus:border-indigo-500/50"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">AWS Region</label>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Secret Access Key</label>
+                  <input
+                    type="password"
+                    value={awsSecretKey}
+                    onChange={(e) => setAwsSecretKey(e.target.value)}
+                    placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                    className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Default Region</label>
                   <input
                     type="text"
                     value={awsRegion}
@@ -301,11 +317,11 @@ export default function IntegrationsManager() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleToggleConnect(activeModal as keyof IntegrationsState, true, { role_arn: awsRole, region: awsRegion })}
-                  disabled={!awsRole}
+                  onClick={() => handleToggleConnect("aws", true, { access_key_id: awsAccessKey, secret_access_key: awsSecretKey, region: awsRegion })}
+                  disabled={!awsAccessKey || !awsSecretKey}
                   className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50 cursor-pointer"
                 >
-                  Verify & Connect
+                  Authenticate AWS
                 </button>
               </div>
             </div>
@@ -313,14 +329,14 @@ export default function IntegrationsManager() {
         )}
 
         {/* Azure Modal */}
-        {(activeModal === "aks" || activeModal === "azure_vm" || activeModal === "azure_vmss" || activeModal === "azure_app_service") && (
+        {activeModal === "azure" && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="glass-panel border border-slate-800 w-full max-w-md rounded-2xl overflow-hidden relative shadow-2xl p-6 space-y-4">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Key className="text-sky-400" /> Connect Azure Resource
+                <Key className="text-sky-400" /> Connect Azure Tenant
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Provide Service Principal access credentials to authorize log data forwarding.
+                Provide Service Principal access credentials to authorize Nexus AI to fetch VMs and Azure Monitor logs.
               </p>
               <div className="space-y-3 pt-2">
                 <div>
@@ -371,11 +387,11 @@ export default function IntegrationsManager() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleToggleConnect(activeModal as keyof IntegrationsState, true, { client_id: azureClient, client_secret: azureSecret, tenant_id: azureTenant })}
+                  onClick={() => handleToggleConnect("azure", true, { client_id: azureClient, client_secret: azureSecret, tenant_id: azureTenant })}
                   disabled={!azureTenant || !azureClient || !azureSecret}
                   className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50 cursor-pointer"
                 >
-                  Verify & Connect
+                  Authenticate Azure
                 </button>
               </div>
             </div>
