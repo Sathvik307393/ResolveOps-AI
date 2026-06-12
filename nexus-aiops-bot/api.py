@@ -805,10 +805,10 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                                 run = runs[0]
                                 db_item = {
                                     "commit_sha": run.get("head_sha", ""),
-                                    "commit_msg": run.get("head_commit", {}).get("message", "Commit"),
-                                    "author": run.get("head_commit", {}).get("author", {}).get("name", "Unknown"),
+                                    "commit_msg": (run.get("head_commit") or {}).get("message", "Commit"),
+                                    "author": ((run.get("head_commit") or {}).get("author") or {}).get("name", "Unknown"),
                                     "repository": repo_name,
-                                    "timestamp": run.get("updated_at", run.get("created_at", "")),
+                                    "timestamp": run.get("updated_at") or run.get("created_at") or "",
                                     "workflow_run_id": str(run.get("id", "")),
                                     "status": run.get("status"),
                                     "conclusion": run.get("conclusion")
@@ -823,10 +823,10 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                                         commit = commits[0]
                                         db_item = {
                                             "commit_sha": commit.get("sha", ""),
-                                            "commit_msg": commit.get("commit", {}).get("message", "Commit"),
-                                            "author": commit.get("commit", {}).get("author", {}).get("name", "Unknown"),
+                                            "commit_msg": (commit.get("commit") or {}).get("message", "Commit"),
+                                            "author": ((commit.get("commit") or {}).get("author") or {}).get("name", "Unknown"),
                                             "repository": repo_name,
-                                            "timestamp": commit.get("commit", {}).get("author", {}).get("date", ""),
+                                            "timestamp": ((commit.get("commit") or {}).get("author") or {}).get("date", ""),
                                             "workflow_run_id": "PAT_SYNC",
                                             "status": "completed",
                                             "conclusion": "success"
