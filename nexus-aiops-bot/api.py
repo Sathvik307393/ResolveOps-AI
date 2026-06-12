@@ -1154,6 +1154,35 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
                 
                 req.credentials["github_username"] = github_login
 
+        if req.connected and service_key == "azure" and req.credentials:
+            from azure.identity import ClientSecretCredential
+            from azure.mgmt.resource.subscriptions import SubscriptionClient
+            import azure.core.exceptions
+
+            client_id = req.credentials.get("client_id")
+            client_secret = req.credentials.get("client_secret")
+            azure_tenant = req.credentials.get("tenant_id")
+
+            if client_id and client_secret and azure_tenant:
+                try:
+                    credential = ClientSecretCredential(
+                        tenant_id=azure_tenant,
+                        client_id=client_id,
+                        client_secret=client_secret
+                    )
+                    
+                    # Verify by fetching subscriptions
+                    sub_client = SubscriptionClient(credential)
+                    subs = list(sub_client.subscriptions.list())
+                    if not subs:
+                        raise HTTPException(status_code=400, detail="Authenticated successfully, but no Azure subscriptions found for this Tenant.")
+                except azure.core.exceptions.ClientAuthenticationError as auth_err:
+                    raise HTTPException(status_code=400, detail=f"Azure Authentication Failed: {auth_err.message}")
+                except Exception as ex:
+                    if isinstance(ex, HTTPException):
+                        raise ex
+                    raise HTTPException(status_code=400, detail=f"Could not verify Azure credentials: {str(ex)}")
+
         integrations[service_key]["connected"] = req.connected
         if req.credentials:
             integrations[service_key]["credentials"] = req.credentials
@@ -1276,11 +1305,49 @@ def get_cloud_resources(current_user: dict = Depends(get_current_user)):
             ])
             
         if integrations.get("azure", {}).get("connected"):
-            resources.extend([
-                {"id": "azure-vm-frontend-01", "name": "frontend-web-vm", "type": "Virtual Machine", "provider": "Azure", "region": "eastus", "status": "running"},
-                {"id": "azure-aks-main", "name": "aks-primary-cluster", "type": "AKS Cluster", "provider": "Azure", "region": "eastus", "status": "running"},
-                {"id": "azure-sql-primary", "name": "prod-sql-database", "type": "SQL Database", "provider": "Azure", "region": "eastus", "status": "online"}
-            ])
+            azure_creds = integrations["azure"].get("credentials", {})
+            client_id = azure_creds.get("client_id")
+            client_secret = azure_creds.get("client_secret")
+            azure_tenant = azure_creds.get("tenant_id")
+            
+            if client_id and client_secret and azure_tenant:
+                try:
+                    from azure.identity import ClientSecretCredential
+                    from azure.mgmt.resource.subscriptions import SubscriptionClient
+                    from azure.mgmt.compute import ComputeManagementClient
+                    
+                    credential = ClientSecretCredential(
+                        tenant_id=azure_tenant,
+                        client_id=client_id,
+                        client_secret=client_secret
+                    )
+                    
+                    sub_client = SubscriptionClient(credential)
+                    subs = list(sub_client.subscriptions.list())
+                    
+                    for sub in subs:
+                        compute_client = ComputeManagementClient(credential, sub.subscription_id)
+                        # Fetch VMs and their instance view to get power state
+                        vms = compute_client.virtual_machines.list_all(status_only="true")
+                        for vm in vms:
+                            status = "unknown"
+                            if vm.instance_view and vm.instance_view.statuses:
+                                for s in vm.instance_view.statuses:
+                                    if s.code and s.code.startswith("PowerState/"):
+                                        status = s.code.split("/")[1]
+                                        break
+                                        
+                            resources.append({
+                                "id": vm.id,
+                                "name": vm.name,
+                                "type": "Virtual Machine",
+                                "provider": "Azure",
+                                "region": vm.location,
+                                "status": status.lower()
+                            })
+                except Exception as e:
+                    print(f"Error fetching Azure resources: {e}")
+                    # Fallback or just ignore so it doesn't break AWS or other integrations
             
         for r in resources:
             r["selected"] = r["id"] in selected_ids

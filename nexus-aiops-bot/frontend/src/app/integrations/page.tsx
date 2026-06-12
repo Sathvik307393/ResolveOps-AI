@@ -337,10 +337,14 @@ export default function IntegrationsManager() {
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
                 Provide Service Principal access credentials to authorize Nexus AI to fetch VMs and Azure Monitor logs.
+                <br />
+                <strong className="text-slate-400">Hint:</strong> You can find these details in the Azure Portal under <strong>Microsoft Entra ID &gt; App Registrations</strong>.
               </p>
               <div className="space-y-3 pt-2">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Tenant ID</label>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                    Tenant ID <span className="normal-case font-normal text-slate-500 ml-1">(Directory ID)</span>
+                  </label>
                   <input
                     type="text"
                     value={azureTenant}
@@ -350,7 +354,9 @@ export default function IntegrationsManager() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Application (Client) ID</label>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                    Application (Client) ID
+                  </label>
                   <input
                     type="text"
                     value={azureClient}
@@ -360,7 +366,9 @@ export default function IntegrationsManager() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Client Secret</label>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                    Client Secret <span className="normal-case font-normal text-slate-500 ml-1">(Certificates & secrets &gt; Client secrets &gt; Value)</span>
+                  </label>
                   <div className="relative">
                     <input
                       type={showAzureSecret ? "text" : "password"}

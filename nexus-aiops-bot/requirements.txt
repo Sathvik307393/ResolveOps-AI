@@ -12,3 +12,6 @@ boto3
 faiss-cpu
 pydantic>=2.7.2
 SpeechRecognition
+azure-identity
+azure-mgmt-resource
+azure-mgmt-compute
