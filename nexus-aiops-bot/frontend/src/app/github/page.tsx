@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 import { GitBranch, User, Clock, CheckCircle, XCircle, AlertCircle, Activity, RefreshCw, Bot, Terminal, Play } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
@@ -336,7 +337,7 @@ export default function GitHubDeployments() {
                       <Bot size={14} /> AI Root Cause & Prediction
                     </h4>
                     <div className="text-slate-300 text-sm whitespace-pre-wrap leading-relaxed">
-                      {diagnoseModal.data?.diagnosis}
+                      <MarkdownRenderer content={diagnoseModal.data?.diagnosis || ""} />
                     </div>
                   </div>
 
