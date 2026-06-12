@@ -668,14 +668,17 @@ def get_integrations(current_user: dict = Depends(get_current_user)):
         tenant_email = current_user.get("email")
         integrations = get_user_integrations(tenant_email)
         
-        # Build status boolean map
         status_map = {
             "github": False, "eks": False, "aks": False,
-            "aws_ec2": False, "azure_vm": False, "azure_vmss": False, "azure_app_service": False
+            "aws_ec2": False, "azure_vm": False, "azure_vmss": False, "azure_app_service": False,
+            "github_details": None
         }
-        for k in status_map.keys():
+        for k in list(status_map.keys()):
+            if k == "github_details": continue
             if k in integrations and integrations[k].get("connected"):
                 status_map[k] = True
+                if k == "github":
+                    status_map["github_details"] = integrations[k].get("credentials", {}).get("repo_fullname")
                 
         return status_map
     except Exception as e:
@@ -684,6 +687,7 @@ def get_integrations(current_user: dict = Depends(get_current_user)):
 @app.post("/api/v1/integrations/connect")
 def update_integration_connection(req: ConnectionRequest, current_user: dict = Depends(get_current_user)):
     """Updates / Saves credentials and toggles connection status for an external service."""
+    import requests
     try:
         tenant_email = current_user.get("email")
         integrations = get_user_integrations(tenant_email)
@@ -692,6 +696,39 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
         if service_key not in integrations:
             integrations[service_key] = {}
             
+        if req.connected and service_key == "github" and req.credentials:
+            github_token = req.credentials.get("github_token")
+            repo_fullname = req.credentials.get("repo_fullname")
+            
+            if github_token and repo_fullname:
+                repo_parts = repo_fullname.split("/")
+                if len(repo_parts) != 2:
+                    raise HTTPException(status_code=400, detail="Repository name must be in the format 'owner/repo'")
+                requested_owner = repo_parts[0]
+                
+                headers = {
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                    "Authorization": f"token {github_token}"
+                }
+                r = requests.get("https://api.github.com/user", headers=headers, timeout=5)
+                if r.status_code != 200:
+                    raise HTTPException(status_code=400, detail="Invalid GitHub Personal Access Token")
+                
+                user_data = r.json()
+                github_login = user_data.get("login")
+                
+                if not github_login:
+                    raise HTTPException(status_code=400, detail="Could not determine GitHub account from PAT")
+                
+                if requested_owner.lower() != github_login.lower():
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"This PAT belongs to account '{github_login}', but you are trying to connect a repository owned by '{requested_owner}'. You can only connect your own repositories."
+                    )
+                
+                req.credentials["github_username"] = github_login
+
         integrations[service_key]["connected"] = req.connected
         if req.credentials:
             integrations[service_key]["credentials"] = req.credentials
@@ -701,13 +738,19 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
         # Build returned status map
         status_map = {
             "github": False, "eks": False, "aks": False,
-            "aws_ec2": False, "azure_vm": False, "azure_vmss": False, "azure_app_service": False
+            "aws_ec2": False, "azure_vm": False, "azure_vmss": False, "azure_app_service": False,
+            "github_details": None
         }
-        for k in status_map.keys():
+        for k in list(status_map.keys()):
+            if k == "github_details": continue
             if k in integrations and integrations[k].get("connected"):
                 status_map[k] = True
+                if k == "github":
+                    status_map["github_details"] = integrations[k].get("credentials", {}).get("repo_fullname")
                 
         return {"status": "success", "message": f"{req.service} connection status updated", "integrations": status_map}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

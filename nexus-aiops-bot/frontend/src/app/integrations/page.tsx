@@ -20,8 +20,9 @@ export default function IntegrationsManager() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<IntegrationsState>({ 
-    github: false, eks: false, aks: false, aws_ec2: false, azure_vm: false, azure_vmss: false, azure_app_service: false 
+    github: false, eks: false, aks: false, aws_ec2: false, azure_vm: false, azure_vmss: false, azure_app_service: false
   });
+  const [githubDetails, setGithubDetails] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<"github" | "eks" | "aks" | "aws_ec2" | "azure_vm" | "azure_vmss" | "azure_app_service" | null>(null);
   
   // Modal Fields
@@ -35,8 +36,11 @@ export default function IntegrationsManager() {
 
   const loadIntegrations = () => {
     fetchApi("/api/v1/integrations")
-      .then((data) => {
-        if (data) setStatus(data);
+      .then((data: any) => {
+        if (data) {
+          setStatus(data);
+          if (data.github_details) setGithubDetails(data.github_details);
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -63,6 +67,9 @@ export default function IntegrationsManager() {
       });
       if (data?.integrations) {
         setStatus(data.integrations);
+        if (data.integrations.github_details !== undefined) {
+          setGithubDetails(data.integrations.github_details);
+        }
       }
       setActiveModal(null);
       // Reset inputs
@@ -70,8 +77,8 @@ export default function IntegrationsManager() {
       setAzureSecret("");
       setGithubRepo("");
       setGithubToken("");
-    } catch (err) {
-      alert("Failed to update integration connection");
+    } catch (err: any) {
+      alert(err.message || "Failed to update integration connection");
     }
   };
 
@@ -102,11 +109,16 @@ export default function IntegrationsManager() {
             <div className={`p-3 bg-slate-800 rounded-lg ${color}`}>
               <Icon size={22} />
             </div>
-            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-              isConnected ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"
-            }`}>
-              {isConnected ? "Connected" : "Disconnected"}
-            </span>
+            <div className="flex flex-col items-end">
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                isConnected ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"
+              }`}>
+                {isConnected ? "Connected" : "Disconnected"}
+              </span>
+              {isConnected && key === "github" && githubDetails && (
+                <span className="text-[10px] text-slate-400 mt-1 font-mono">{githubDetails}</span>
+              )}
+            </div>
           </div>
           <h3 className="text-white font-semibold text-lg mb-1">{title}</h3>
           <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
@@ -191,9 +203,11 @@ export default function IntegrationsManager() {
                     type="password"
                     value={githubToken}
                     onChange={(e) => setGithubToken(e.target.value)}
-                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxx"
                     className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none focus:border-indigo-500/50"
                   />
+                  <p className="text-[10px] text-slate-500 mt-1.5 leading-tight">
+                    <strong>Note:</strong> When creating a Classic PAT, only select the <code className="text-indigo-400 bg-indigo-400/10 px-1 py-0.5 rounded">repo</code> scope. Do not select <code className="text-rose-400 bg-rose-400/10 px-1 py-0.5 rounded">write:packages</code> or other unnecessary scopes.
+                  </p>
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-850">
