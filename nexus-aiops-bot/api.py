@@ -771,18 +771,12 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
         
         if pat:
             headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
-            # Fetch up to 50 owned repos and up to 50 other repos to guarantee PAT's own repos are always visible
             repos = []
             
-            # 1. Owned Repositories
+            # 1. Owned Repositories Only (Restricting to PAT owner)
             owner_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50&affiliation=owner", headers=headers)
             if owner_res.status_code == 200:
                 repos.extend(owner_res.json())
-                
-            # 2. Organization & Collaborator Repositories
-            other_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50&affiliation=collaborator,organization_member", headers=headers)
-            if other_res.status_code == 200:
-                repos.extend(other_res.json())
                 
             if repos:
                 for repo in repos:
@@ -1097,12 +1091,13 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
                     "Authorization": f"token {github_token}"
                 }
                 
-                # Verify emails if possible
+                # Verify emails
                 r_emails = requests.get("https://api.github.com/user/emails", headers=headers, timeout=5)
-                verified_emails = []
-                if r_emails.status_code == 200:
-                    emails_data = r_emails.json()
-                    verified_emails = [e.get("email").lower() for e in emails_data if e.get("verified")]
+                if r_emails.status_code != 200:
+                    raise HTTPException(status_code=400, detail="Invalid GitHub Personal Access Token or missing 'user:email' scope. Please regenerate your PAT with the 'user:email' scope.")
+                
+                emails_data = r_emails.json()
+                verified_emails = [e.get("email").lower() for e in emails_data if e.get("verified")]
                 
                 r_user = requests.get("https://api.github.com/user", headers=headers, timeout=5)
                 if r_user.status_code != 200:
@@ -1111,17 +1106,11 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
                 user_data = r_user.json()
                 github_login = user_data.get("login")
                 
-                # Check if the provided input matches either a verified email or the username
-                if r_emails.status_code == 200:
-                    if github_email.lower() not in verified_emails and github_email.lower() != github_login.lower():
-                        raise HTTPException(
-                            status_code=400, 
-                            detail=f"The provided email/username '{github_email}' does not match the GitHub account associated with this PAT. Verified login is '{github_login}'."
-                        )
-                else:
-                    # If we don't have user:email scope, just verify that the PAT is valid and matches the username if they typed a username
-                    # If they typed an email, we can't verify it, so we accept the PAT and use the github_login
-                    pass
+                if github_email.lower() not in verified_emails and github_email.lower() != github_login.lower():
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"The provided email/username '{github_email}' does not match the GitHub account associated with this PAT. Verified login is '{github_login}'."
+                    )
                 
                 req.credentials["github_username"] = github_login
 

@@ -233,7 +233,7 @@ export default function IntegrationsManager() {
                     className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none focus:border-indigo-500/50"
                   />
                   <p className="text-[10px] text-slate-500 leading-relaxed mt-2">
-                    <strong className="text-slate-400">Note:</strong> When creating a Classic PAT, select both the <code className="bg-indigo-500/20 text-indigo-400 px-1 py-0.5 rounded">repo</code> and <code className="bg-indigo-500/20 text-indigo-400 px-1 py-0.5 rounded">workflow</code> scopes so Nexus AI can read and run pipelines. Do not select <code className="bg-rose-500/20 text-rose-400 px-1 py-0.5 rounded">write:packages</code> or other unnecessary scopes.
+                    <strong className="text-slate-400">Note:</strong> When creating a Classic PAT, select the <code className="bg-indigo-500/20 text-indigo-400 px-1 py-0.5 rounded">repo</code>, <code className="bg-indigo-500/20 text-indigo-400 px-1 py-0.5 rounded">workflow</code>, and <code className="bg-indigo-500/20 text-indigo-400 px-1 py-0.5 rounded">user:email</code> scopes so Nexus AI can verify your account and run pipelines. Do not select unnecessary scopes.
                   </p>
                 </div>
               </div>
