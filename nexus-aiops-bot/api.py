@@ -964,9 +964,19 @@ def run_github_workflow(req: RunWorkflowRequest, current_user: dict = Depends(ge
         
         # Trigger workflow dispatch or rerun
         if req.workflow_id.isdigit():
-            # Rerun existing workflow run
+            # Attempt to rerun existing workflow run
             dispatch_url = f"https://api.github.com/repos/{req.repository}/actions/runs/{req.workflow_id}/rerun"
             r = requests.post(dispatch_url, headers=headers)
+            
+            # If rerun fails (e.g., >30 days old, or successful run), fallback to dispatching a new run
+            if r.status_code not in [204, 201]:
+                run_info = requests.get(f"https://api.github.com/repos/{req.repository}/actions/runs/{req.workflow_id}", headers=headers)
+                if run_info.status_code == 200:
+                    real_workflow_id = run_info.json().get("workflow_id")
+                    if real_workflow_id:
+                        dispatch_url = f"https://api.github.com/repos/{req.repository}/actions/workflows/{real_workflow_id}/dispatches"
+                        payload = {"ref": req.branch}
+                        r = requests.post(dispatch_url, headers=headers, json=payload)
         else:
             dispatch_url = f"https://api.github.com/repos/{req.repository}/actions/workflows/{req.workflow_id}/dispatches"
             payload = {"ref": req.branch}
