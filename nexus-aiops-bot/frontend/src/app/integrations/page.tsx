@@ -24,6 +24,7 @@ export default function IntegrationsManager() {
   });
   const [githubDetails, setGithubDetails] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<"github" | "eks" | "aks" | "aws_ec2" | "azure_vm" | "azure_vmss" | "azure_app_service" | null>(null);
+  const [successToast, setSuccessToast] = useState({ show: false, title: "", message: "" });
   
   // Modal Fields
   const [githubPat, setGithubPat] = useState("");
@@ -71,6 +72,15 @@ export default function IntegrationsManager() {
         if (data.integrations.github_details !== undefined) {
           setGithubDetails(data.integrations.github_details);
         }
+      }
+      if (isConnect) {
+        const title = service === "github" ? "GitHub Connected" : "Connection Successful";
+        const msg = service === "github" && data?.integrations?.github_details 
+          ? `Successfully authenticated as ${data.integrations.github_details}` 
+          : `Successfully connected ${service} resource`;
+          
+        setSuccessToast({ show: true, title, message: msg });
+        setTimeout(() => setSuccessToast(prev => ({ ...prev, show: false })), 4000);
       }
       setActiveModal(null);
       // Reset inputs
