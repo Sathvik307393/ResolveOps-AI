@@ -774,15 +774,16 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
             repos = []
             
             # 1. Owned Repositories Only (Restricting to PAT owner)
-            owner_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=10&affiliation=owner", headers=headers, timeout=5)
+            owner_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=100&affiliation=owner", headers=headers, timeout=5)
             if owner_res.status_code == 200:
                 repos.extend(owner_res.json())
                 
             if repos:
-                for repo in repos:
+                import concurrent.futures
+
+                def fetch_repo_data(repo):
                     repo_name = repo.get("full_name")
-                    if not repo_name: continue
-                    
+                    if not repo_name: return None
                     repo_updated_at = repo.get("updated_at", "")
                     cache_key_repo = f"{tenant_id}_{repo_name}"
                     
@@ -790,14 +791,13 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                     if cache_key_repo in github_repo_workflow_cache:
                         cached_entry = github_repo_workflow_cache[cache_key_repo]
                         if cached_entry["updated_at"] == repo_updated_at:
-                            db_items.append(cached_entry["db_item"])
-                            continue
-                            
+                            return cached_entry["db_item"]
+
                     # Fetch latest workflow run if cache miss or repo was updated
+                    db_item = None
                     try:
                         runs_url = f"https://api.github.com/repos/{repo_name}/actions/runs?per_page=1"
                         runs_res = requests.get(runs_url, headers=headers, timeout=3)
-                        db_item = None
                         if runs_res.status_code == 200:
                             runs_data = runs_res.json()
                             runs = runs_data.get("workflow_runs", [])
@@ -832,8 +832,7 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                                             "conclusion": "success"
                                         }
                     except requests.exceptions.RequestException:
-                        # If a request times out or fails, skip fetching for this repo to prevent breaking others
-                        db_item = None
+                        pass
                     
                     if not db_item:
                         db_item = {
@@ -846,16 +845,22 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                             "status": "completed",
                             "conclusion": "success"
                         }
-                    if db_item:
-                        github_repo_workflow_cache[cache_key_repo] = {
-                            "updated_at": repo_updated_at,
-                            "db_item": db_item
-                        }
-                        db_items.append(db_item)
+                    
+                    github_repo_workflow_cache[cache_key_repo] = {
+                        "updated_at": repo_updated_at,
+                        "db_item": db_item
+                    }
+                    return db_item
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                    results = executor.map(fetch_repo_data, repos)
+                    for item in results:
+                        if item:
+                            db_items.append(item)
                         
                         # Trigger background diagnosis if pipeline failed and hasn't been notified yet
-                        if db_item.get("conclusion") == "failure" and db_item.get("workflow_run_id") != "PAT_SYNC":
-                            run_id = db_item.get("workflow_run_id")
+                        if item.get("conclusion") == "failure" and item.get("workflow_run_id") != "PAT_SYNC":
+                            run_id = item.get("workflow_run_id")
                             if run_id not in notified_failed_workflows:
                                 notified_failed_workflows.add(run_id)
                                 background_tasks.add_task(
