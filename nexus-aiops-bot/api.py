@@ -872,13 +872,16 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                                     )
                             
         # Sort combined items by timestamp descending
-        db_items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        db_items.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
         
         # Save to main 10s cache
         github_deployments_cache[cache_key] = {'time': current_time, 'data': db_items}
         
         return db_items
     except Exception as e:
+        import traceback
+        with open("error.log", "w") as f:
+            f.write(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 class DiagnoseRequest(BaseModel):
