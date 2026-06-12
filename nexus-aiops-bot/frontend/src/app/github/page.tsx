@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -22,9 +21,9 @@ export default function GitHubDeployments() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [deployments, setDeployments] = useState<DeploymentEvent[]>([]);
-  const [diagnoseModal, setDiagnoseModal] = useState<{isOpen: boolean, data?: any, loading?: boolean}>({isOpen: false});
-  const [liveModal, setLiveModal] = useState<{isOpen: boolean, repo?: string, run_id?: string, data?: any, loading?: boolean}>({isOpen: false});
-  
+  const [diagnoseModal, setDiagnoseModal] = useState<{ isOpen: boolean, data?: any, loading?: boolean }>({ isOpen: false });
+  const [liveModal, setLiveModal] = useState<{ isOpen: boolean, repo?: string, run_id?: string, data?: any, loading?: boolean }>({ isOpen: false });
+
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -51,18 +50,14 @@ export default function GitHubDeployments() {
   const handleDiagnose = async (repository: string, workflow_run_id: string) => {
     setDiagnoseModal({ isOpen: true, loading: true });
     try {
-      const res = await fetch("/api/v1/github/diagnose", {
+      const data = await fetchApi("/api/v1/github/diagnose", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("jwt_token")}`,
-        },
         body: JSON.stringify({ repository, workflow_run_id }),
       });
-      const data = await res.json();
       setDiagnoseModal({ isOpen: true, loading: false, data });
-    } catch (error) {
-      setDiagnoseModal({ isOpen: true, loading: false, data: { diagnosis: "Error communicating with diagnosis engine." } });
+    } catch (error: any) {
+      const errMsg = typeof error.message === 'string' ? error.message : JSON.stringify(error);
+      setDiagnoseModal({ isOpen: true, loading: false, data: { diagnosis: errMsg || "Error communicating with diagnosis engine." } });
     }
   };
 
@@ -175,21 +170,21 @@ export default function GitHubDeployments() {
                 <div className="col-span-2">Workflow Sync</div>
                 <div className="col-span-2 text-right">Timestamp</div>
               </div>
-              
+
               {/* Data Rows */}
               <div className="divide-y divide-border bg-background/20">
                 {deployments.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((deploy, i) => {
                   const repoParts = deploy.repository.split('/');
                   const repoOwner = repoParts[0];
                   const repoName = repoParts[1] || deploy.repository;
-                  
+
                   return (
                     <div key={i} className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-white/[0.04] transition-colors group cursor-default">
                       {/* Repo */}
                       <div className="col-span-3 flex flex-col justify-center truncate pr-2">
-                        <a 
-                          href={`https://github.com/${deploy.repository}`} 
-                          target="_blank" 
+                        <a
+                          href={`https://github.com/${deploy.repository}`}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="font-semibold text-sm text-slate-200 group-hover:text-primary transition-colors hover:underline flex items-center gap-1.5"
                         >
@@ -203,7 +198,7 @@ export default function GitHubDeployments() {
                           Pipeline: {deploy.workflow_name || "Unknown"}
                         </span>
                       </div>
-                      
+
                       {/* Commit SHA & Author */}
                       <div className="col-span-2 flex flex-col justify-center">
                         <span className="font-mono text-xs text-slate-400 group-hover:text-primary transition-colors">
@@ -214,64 +209,65 @@ export default function GitHubDeployments() {
                           <span className="truncate" title="Commit Author">{deploy.author}</span>
                         </div>
                       </div>
-                    
-                    {/* Message */}
-                    <div className="col-span-3 text-xs text-slate-300 truncate pr-4">
-                      {deploy.commit_msg || "Commit push"}
-                    </div>
-                    
-                    {/* Workflow Sync Status */}
-                    <div className="col-span-2 flex flex-wrap items-center gap-2">
-                      {deploy.status === "in_progress" || deploy.status === "queued" ? (
-                        <span className="bg-amber-500/10 text-amber-500 px-2.5 py-1 rounded-md text-[10px] font-semibold border border-amber-500/20 flex items-center gap-1.5 shadow-sm">
-                          <Activity size={12} className="animate-spin" /> {deploy.status === "queued" ? "Queued" : "Running"}
-                        </span>
-                      ) : deploy.conclusion === "failure" ? (
-                        <span className="bg-rose-500/10 text-rose-500 px-2.5 py-1 rounded-md text-[10px] font-semibold border border-rose-500/20 flex items-center gap-1.5 shadow-sm">
-                          <XCircle size={12} /> Failed
-                        </span>
-                      ) : (
-                        <span className="bg-emerald-500/10 text-emerald-500 px-2.5 py-1 rounded-md text-[10px] font-semibold border border-emerald-500/20 flex items-center gap-1.5 shadow-sm">
-                          <CheckCircle size={12} /> Complete
-                        </span>
-                      )}
 
-                      {deploy.workflow_run_id && deploy.workflow_run_id !== "PAT_SYNC" && (
-                        <div className="flex items-center gap-1.5 mt-1 w-full">
-                          <button 
-                            onClick={() => handleLiveView(deploy.repository, deploy.workflow_run_id!)}
-                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded text-[9px] font-semibold border border-emerald-500/30 transition-all flex items-center gap-1 hover:shadow-md"
-                          >
-                            <Activity size={10} /> Live View
-                          </button>
-                          
-                          {deploy.conclusion === "failure" && (
-                            <button 
-                              onClick={() => handleDiagnose(deploy.repository, deploy.workflow_run_id!)}
-                              className="bg-primary/10 hover:bg-primary/20 text-primary px-2 py-1 rounded text-[9px] font-semibold border border-primary/30 transition-all flex items-center gap-1 hover:shadow-md"
+                      {/* Message */}
+                      <div className="col-span-3 text-xs text-slate-300 truncate pr-4">
+                        {deploy.commit_msg || "Commit push"}
+                      </div>
+
+                      {/* Workflow Sync Status */}
+                      <div className="col-span-2 flex flex-wrap items-center gap-2">
+                        {deploy.status === "in_progress" || deploy.status === "queued" ? (
+                          <span className="bg-amber-500/10 text-amber-500 px-2.5 py-1 rounded-md text-[10px] font-semibold border border-amber-500/20 flex items-center gap-1.5 shadow-sm">
+                            <Activity size={12} className="animate-spin" /> {deploy.status === "queued" ? "Queued" : "Running"}
+                          </span>
+                        ) : deploy.conclusion === "failure" ? (
+                          <span className="bg-rose-500/10 text-rose-500 px-2.5 py-1 rounded-md text-[10px] font-semibold border border-rose-500/20 flex items-center gap-1.5 shadow-sm">
+                            <XCircle size={12} /> Failed
+                          </span>
+                        ) : (
+                          <span className="bg-emerald-500/10 text-emerald-500 px-2.5 py-1 rounded-md text-[10px] font-semibold border border-emerald-500/20 flex items-center gap-1.5 shadow-sm">
+                            <CheckCircle size={12} /> Complete
+                          </span>
+                        )}
+
+                        {deploy.workflow_run_id && deploy.workflow_run_id !== "PAT_SYNC" && (
+                          <div className="flex items-center gap-1.5 mt-1 w-full">
+                            <button
+                              onClick={() => handleLiveView(deploy.repository, deploy.workflow_run_id!)}
+                              className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded text-[9px] font-semibold border border-emerald-500/30 transition-all flex items-center gap-1 hover:shadow-md"
                             >
-                              <Bot size={10} /> Diagnose
+                              <Activity size={10} /> Live View
                             </button>
-                          )}
-                          
-                          <button 
-                            onClick={() => handleRunPipeline(deploy.repository, deploy.workflow_run_id!)}
-                            className="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded text-[9px] font-semibold border border-indigo-500/30 transition-all flex items-center gap-1 hover:shadow-md"
-                          >
-                            <Play size={10} /> Run
-                          </button>
-                        </div>
-                      )}
+
+                            {deploy.conclusion === "failure" && (
+                              <button
+                                onClick={() => handleDiagnose(deploy.repository, deploy.workflow_run_id!)}
+                                className="bg-primary/10 hover:bg-primary/20 text-primary px-2 py-1 rounded text-[9px] font-semibold border border-primary/30 transition-all flex items-center gap-1 hover:shadow-md"
+                              >
+                                <Bot size={10} /> Diagnose
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleRunPipeline(deploy.repository, deploy.workflow_run_id!)}
+                              className="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded text-[9px] font-semibold border border-indigo-500/30 transition-all flex items-center gap-1 hover:shadow-md"
+                            >
+                              <Play size={10} /> Run
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Timestamp */}
+                      <div className="col-span-2 text-right text-[11px] text-slate-500 font-mono">
+                        {deploy.timestamp ? new Date(deploy.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : "just now"}
+                      </div>
                     </div>
-                    
-                    {/* Timestamp */}
-                    <div className="col-span-2 text-right text-[11px] text-slate-500 font-mono">
-                      {deploy.timestamp ? new Date(deploy.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : "just now"}
-                    </div>
-                  </div>
-                )})}
+                  )
+                })}
               </div>
-              
+
               {/* Pagination Controls */}
               {deployments.length > itemsPerPage && (
                 <div className="p-4 border-t border-border bg-black/10 flex items-center justify-between">
@@ -279,7 +275,7 @@ export default function GitHubDeployments() {
                     Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, deployments.length)} of {deployments.length}
                   </span>
                   <div className="flex items-center gap-2">
-                    <button 
+                    <button
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
                       className="px-3 py-1.5 rounded bg-card border border-border text-xs font-semibold text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
@@ -287,7 +283,7 @@ export default function GitHubDeployments() {
                       Previous
                     </button>
                     <span className="text-xs text-slate-400 font-mono px-2">Page {currentPage}</span>
-                    <button 
+                    <button
                       onClick={() => setCurrentPage(p => (p * itemsPerPage < deployments.length ? p + 1 : p))}
                       disabled={currentPage * itemsPerPage >= deployments.length}
                       className="px-3 py-1.5 rounded bg-card border border-border text-xs font-semibold text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-colors"
@@ -311,14 +307,14 @@ export default function GitHubDeployments() {
                 <Bot className="text-primary" size={20} />
                 <h3 className="font-bold text-slate-100 tracking-wide">Nexus AI Diagnostics</h3>
               </div>
-              <button 
-                onClick={() => setDiagnoseModal({isOpen: false})}
+              <button
+                onClick={() => setDiagnoseModal({ isOpen: false })}
                 className="text-slate-500 hover:text-slate-300 transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-md"
               >
                 <XCircle size={18} />
               </button>
             </div>
-            
+
             <div className="p-6 overflow-y-auto flex-1 bg-background/50">
               {diagnoseModal.loading ? (
                 <div className="flex flex-col items-center justify-center py-16 space-y-4">
@@ -333,7 +329,7 @@ export default function GitHubDeployments() {
                       <p className="text-slate-200 font-mono text-sm">{diagnoseModal.data.job_name}</p>
                     </div>
                   )}
-                  
+
                   <div className="bg-primary/5 p-5 rounded-lg border border-primary/20 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-primary/50"></div>
                     <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -370,14 +366,14 @@ export default function GitHubDeployments() {
                 <Activity className="text-emerald-500 animate-pulse" size={20} />
                 <h3 className="font-bold text-slate-100 tracking-wide">Live Pipeline Status</h3>
               </div>
-              <button 
-                onClick={() => setLiveModal({isOpen: false})}
+              <button
+                onClick={() => setLiveModal({ isOpen: false })}
                 className="text-slate-500 hover:text-slate-300 transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-md"
               >
                 <XCircle size={18} />
               </button>
             </div>
-            
+
             <div className="p-6 overflow-y-auto flex-1 bg-background/50">
               {liveModal.loading ? (
                 <div className="flex flex-col items-center justify-center py-16 space-y-4">
@@ -398,28 +394,28 @@ export default function GitHubDeployments() {
                       </span>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Jobs & Steps</h4>
                     {liveModal.data?.jobs?.length ? (
                       liveModal.data.jobs.map((job: any, jIdx: number) => (
                         <div key={jIdx} className="bg-black/20 p-4 rounded-lg border border-border">
                           <div className="flex items-center gap-2 mb-3">
-                            {job.status === "in_progress" ? <Activity size={14} className="text-amber-500 animate-spin" /> : 
-                             job.conclusion === "success" ? <CheckCircle size={14} className="text-emerald-500" /> : 
-                             <XCircle size={14} className="text-rose-500" />}
+                            {job.status === "in_progress" ? <Activity size={14} className="text-amber-500 animate-spin" /> :
+                              job.conclusion === "success" ? <CheckCircle size={14} className="text-emerald-500" /> :
+                                <XCircle size={14} className="text-rose-500" />}
                             <span className="font-semibold text-slate-300 text-sm">{job.name}</span>
                           </div>
-                          
+
                           <div className="ml-5 space-y-2 border-l border-slate-700/50 pl-4">
                             {job.steps?.map((step: any, sIdx: number) => (
                               <div key={sIdx} className="flex justify-between items-center group">
                                 <div className="flex items-center gap-2">
-                                  {step.status === "in_progress" ? <Activity size={10} className="text-amber-500 animate-spin" /> : 
-                                   step.conclusion === "success" ? <CheckCircle size={10} className="text-emerald-500" /> : 
-                                   step.conclusion === "skipped" ? <CheckCircle size={10} className="text-slate-600" /> :
-                                   step.status === "queued" ? <Clock size={10} className="text-slate-500" /> :
-                                   <XCircle size={10} className="text-rose-500" />}
+                                  {step.status === "in_progress" ? <Activity size={10} className="text-amber-500 animate-spin" /> :
+                                    step.conclusion === "success" ? <CheckCircle size={10} className="text-emerald-500" /> :
+                                      step.conclusion === "skipped" ? <CheckCircle size={10} className="text-slate-600" /> :
+                                        step.status === "queued" ? <Clock size={10} className="text-slate-500" /> :
+                                          <XCircle size={10} className="text-rose-500" />}
                                   <span className={`text-xs ${step.status === "in_progress" ? "text-amber-400 font-medium" : "text-slate-400"}`}>{step.name}</span>
                                 </div>
                                 <span className="text-[10px] font-mono text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity">
