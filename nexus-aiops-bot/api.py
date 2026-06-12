@@ -800,29 +800,36 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                     if cache_key_repo in github_repo_workflow_cache:
                         cached_entry = github_repo_workflow_cache[cache_key_repo]
                         if cached_entry["updated_at"] == repo_updated_at:
-                            return cached_entry["db_item"]
+                            return cached_entry["db_items"]
 
-                    # Fetch latest workflow run if cache miss or repo was updated
-                    db_item = None
+                    repo_items = []
                     try:
-                        runs_url = f"https://api.github.com/repos/{repo_name}/actions/runs?per_page=1"
+                        runs_url = f"https://api.github.com/repos/{repo_name}/actions/runs?per_page=15"
                         runs_res = requests.get(runs_url, headers=headers, timeout=3)
                         if runs_res.status_code == 200:
                             runs_data = runs_res.json()
                             runs = runs_data.get("workflow_runs", [])
-                            if runs:
-                                run = runs[0]
-                                db_item = {
+                            
+                            seen_workflows = set()
+                            for run in runs:
+                                wf_id = run.get("workflow_id")
+                                if wf_id in seen_workflows:
+                                    continue
+                                seen_workflows.add(wf_id)
+                                
+                                repo_items.append({
                                     "commit_sha": run.get("head_sha", ""),
                                     "commit_msg": (run.get("head_commit") or {}).get("message", "Commit"),
                                     "author": ((run.get("head_commit") or {}).get("author") or {}).get("name", "Unknown"),
                                     "repository": repo_name,
+                                    "workflow_name": run.get("name", "Pipeline"),
                                     "timestamp": run.get("updated_at") or run.get("created_at") or "",
                                     "workflow_run_id": str(run.get("id", "")),
                                     "status": run.get("status"),
                                     "conclusion": run.get("conclusion")
-                                }
-                            else:
+                                })
+                            
+                            if not repo_items:
                                 # Fallback to commit if no workflow runs exist
                                 commits_url = f"https://api.github.com/repos/{repo_name}/commits?per_page=1"
                                 commits_res = requests.get(commits_url, headers=headers, timeout=3)
@@ -830,46 +837,49 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                                     commits = commits_res.json()
                                     if commits and isinstance(commits, list) and len(commits) > 0:
                                         commit = commits[0]
-                                        db_item = {
+                                        repo_items.append({
                                             "commit_sha": commit.get("sha", ""),
                                             "commit_msg": (commit.get("commit") or {}).get("message", "Commit"),
                                             "author": ((commit.get("commit") or {}).get("author") or {}).get("name", "Unknown"),
                                             "repository": repo_name,
+                                            "workflow_name": "Source Sync",
                                             "timestamp": ((commit.get("commit") or {}).get("author") or {}).get("date", ""),
                                             "workflow_run_id": "PAT_SYNC",
                                             "status": "completed",
                                             "conclusion": "success"
-                                        }
+                                        })
                     except requests.exceptions.RequestException:
                         pass
                     
-                    if not db_item:
-                        db_item = {
+                    if not repo_items:
+                        repo_items.append({
                             "commit_sha": "N/A",
                             "commit_msg": "No pipeline data or repository is empty.",
                             "author": "-",
                             "repository": repo_name,
+                            "workflow_name": "No Pipelines",
                             "timestamp": repo_updated_at,
                             "workflow_run_id": "PAT_SYNC",
                             "status": "completed",
                             "conclusion": "success"
-                        }
+                        })
                     
                     github_repo_workflow_cache[cache_key_repo] = {
                         "updated_at": repo_updated_at,
-                        "db_item": db_item
+                        "db_items": repo_items
                     }
-                    return db_item
+                    return repo_items
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                     results = executor.map(fetch_repo_data, repos)
-                    for item in results:
-                        if item:
-                            db_items.append(item)
-                            
-                            # Trigger background diagnosis if pipeline failed and hasn't been notified yet
-                            if item.get("conclusion") == "failure" and item.get("workflow_run_id") != "PAT_SYNC":
-                                run_id = item.get("workflow_run_id")
+                    for items in results:
+                        if items:
+                            for item in items:
+                                db_items.append(item)
+                                
+                                # Trigger background diagnosis if pipeline failed and hasn't been notified yet
+                                if item.get("conclusion") == "failure" and item.get("workflow_run_id") != "PAT_SYNC":
+                                    run_id = item.get("workflow_run_id")
                                 if run_id not in notified_failed_workflows:
                                     notified_failed_workflows.add(run_id)
                                     background_tasks.add_task(
@@ -1169,9 +1179,9 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
 
 import requests
 
-@app.get("/api/v1/github/workflow_status")
-def get_github_workflow_status(current_user: dict = Depends(get_current_user)):
-    """Fetches real-time workflow status using tenant's stored GitHub credentials."""
+@app.get("/api/v1/github/workflow_status/{owner}/{repo}/{run_id}")
+def get_github_workflow_live_status(owner: str, repo: str, run_id: str, current_user: dict = Depends(get_current_user)):
+    """Fetches real-time workflow jobs and steps using tenant's stored GitHub credentials."""
     try:
         tenant_email = current_user.get("email")
         integrations = get_user_integrations(tenant_email)
@@ -1181,9 +1191,8 @@ def get_github_workflow_status(current_user: dict = Depends(get_current_user)):
             
         creds = integrations["github"].get("credentials", {})
         github_token = creds.get("github_token")
-        repo_fullname = creds.get("repo_fullname")
         
-        if not github_token or not repo_fullname:
+        if not github_token:
             raise HTTPException(status_code=400, detail="GitHub credentials incomplete")
             
         headers = {
@@ -1192,20 +1201,16 @@ def get_github_workflow_status(current_user: dict = Depends(get_current_user)):
             "Authorization": f"token {github_token}"
         }
         
-        runs_url = f"https://api.github.com/repos/{repo_fullname}/actions/runs"
-        r = requests.get(runs_url, headers=headers, timeout=5)
+        repo_fullname = f"{owner}/{repo}"
         
-        if r.status_code != 200:
-            raise HTTPException(status_code=502, detail=f"Failed to fetch from GitHub: {r.text}")
-            
-        data = r.json()
-        runs = data.get("workflow_runs", [])
-        if not runs:
-            return {"status": "success", "data": None, "message": "No workflow runs found"}
-            
-        latest_run = runs[0]
-        run_id = latest_run["id"]
+        # 1. Fetch Run details
+        run_url = f"https://api.github.com/repos/{repo_fullname}/actions/runs/{run_id}"
+        run_res = requests.get(run_url, headers=headers, timeout=5)
+        if run_res.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch run from GitHub: {run_res.text}")
+        run_data = run_res.json()
         
+        # 2. Fetch Jobs
         jobs_url = f"https://api.github.com/repos/{repo_fullname}/actions/runs/{run_id}/jobs"
         jr = requests.get(jobs_url, headers=headers, timeout=5)
         jobs_data = {}
@@ -1229,18 +1234,18 @@ def get_github_workflow_status(current_user: dict = Depends(get_current_user)):
             "source": "api",
             "repo": repo_fullname,
             "run_id": run_id,
-            "run_number": latest_run.get("run_number"),
-            "name": latest_run.get("name"),
-            "status": latest_run.get("status"),
-            "conclusion": latest_run.get("conclusion"),
-            "html_url": latest_run.get("html_url"),
-            "event": latest_run.get("event"),
-            "head_branch": latest_run.get("head_branch"),
-            "head_commit_message": latest_run.get("head_commit", {}).get("message", "No message"),
-            "head_sha": latest_run.get("head_sha"),
-            "actor": latest_run.get("triggering_actor", {}).get("login", latest_run.get("actor", {}).get("login", "unknown")),
-            "created_at": latest_run.get("created_at"),
-            "updated_at": latest_run.get("updated_at"),
+            "run_number": run_data.get("run_number"),
+            "name": run_data.get("name"),
+            "status": run_data.get("status"),
+            "conclusion": run_data.get("conclusion"),
+            "html_url": run_data.get("html_url"),
+            "event": run_data.get("event"),
+            "head_branch": run_data.get("head_branch"),
+            "head_commit_message": run_data.get("head_commit", {}).get("message", "No message"),
+            "head_sha": run_data.get("head_sha"),
+            "actor": run_data.get("triggering_actor", {}).get("login", run_data.get("actor", {}).get("login", "unknown")),
+            "created_at": run_data.get("created_at"),
+            "updated_at": run_data.get("updated_at"),
             "jobs": jobs
         }
         return {"status": "success", "data": result}
