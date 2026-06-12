@@ -353,18 +353,16 @@ async def chat_voice_endpoint(request: VoiceRequest, current_user: dict = Depend
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# In-memory SaaS Connection store
-integrations_store = {}
+# Removed in-memory SaaS Connection store in favor of DynamoDB get_user_integrations
 
-def fetch_latest_github_deployment(tenant_id: str) -> Optional[dict]:
+def fetch_latest_github_deployment(tenant_email: str) -> Optional[dict]:
     """Fetches the latest commit from the tenant's most recently updated repository using their PAT."""
     try:
-        tenant_data = integrations_store.get(tenant_id, {})
-        if not tenant_data.get("github"):
+        tenant_data = get_user_integrations(tenant_email)
+        if not tenant_data.get("github") or not tenant_data["github"].get("connected"):
             return None # GitHub not connected
             
-        creds = tenant_data.get("credentials", {}).get("github", {})
-        pat = creds.get("pat")
+        pat = tenant_data["github"].get("credentials", {}).get("github_token")
         if not pat:
             return None
             
@@ -547,7 +545,7 @@ def ingest_telemetry(event: NexusEvent, current_user: dict = Depends(get_current
                 update_reliability_score(tenant_email, current_score - 2.0)
 
                 # Correlate with recent GitHub Deployment using PAT
-                latest_deploy = fetch_latest_github_deployment(tenant_id)
+                latest_deploy = fetch_latest_github_deployment(tenant_email)
                 if not latest_deploy:
                     # Fallback to webhooks if available
                     latest_deploy = get_latest_deployment(tenant_id)
@@ -768,8 +766,8 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
         db_items = response.get('Items', [])
         
         # Merge live deployments from PAT if available
-        tenant_data = integrations_store.get(tenant_id, {})
-        pat = tenant_data.get("credentials", {}).get("github", {}).get("pat")
+        tenant_data = get_user_integrations(current_user.get("email"))
+        pat = tenant_data.get("github", {}).get("credentials", {}).get("github_token")
         
         if pat:
             headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
@@ -888,9 +886,9 @@ class DiagnoseRequest(BaseModel):
 def diagnose_github_pipeline(req: DiagnoseRequest, current_user: dict = Depends(get_current_user)):
     """Fetches failed workflow logs and generates an AI diagnosis."""
     try:
-        tenant_id = current_user.get("user_id")
-        tenant_data = integrations_store.get(tenant_id, {})
-        pat = tenant_data.get("credentials", {}).get("github", {}).get("pat")
+        tenant_email = current_user.get("email")
+        tenant_data = get_user_integrations(tenant_email)
+        pat = tenant_data.get("github", {}).get("credentials", {}).get("github_token")
         
         if not pat:
             raise HTTPException(status_code=400, detail="GitHub PAT not found")
