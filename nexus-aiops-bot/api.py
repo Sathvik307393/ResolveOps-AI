@@ -774,7 +774,7 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
             repos = []
             
             # 1. Owned Repositories Only (Restricting to PAT owner)
-            owner_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50&affiliation=owner", headers=headers)
+            owner_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=10&affiliation=owner", headers=headers, timeout=5)
             if owner_res.status_code == 200:
                 repos.extend(owner_res.json())
                 
@@ -794,42 +794,46 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                             continue
                             
                     # Fetch latest workflow run if cache miss or repo was updated
-                    runs_url = f"https://api.github.com/repos/{repo_name}/actions/runs?per_page=1"
-                    runs_res = requests.get(runs_url, headers=headers)
-                    db_item = None
-                    if runs_res.status_code == 200:
-                        runs_data = runs_res.json()
-                        runs = runs_data.get("workflow_runs", [])
-                        if runs:
-                            run = runs[0]
-                            db_item = {
-                                "commit_sha": run.get("head_sha", ""),
-                                "commit_msg": run.get("head_commit", {}).get("message", "Commit"),
-                                "author": run.get("head_commit", {}).get("author", {}).get("name", "Unknown"),
-                                "repository": repo_name,
-                                "timestamp": run.get("updated_at", run.get("created_at", "")),
-                                "workflow_run_id": str(run.get("id", "")),
-                                "status": run.get("status"),
-                                "conclusion": run.get("conclusion")
-                            }
-                        else:
-                            # Fallback to commit if no workflow runs exist
-                            commits_url = f"https://api.github.com/repos/{repo_name}/commits?per_page=1"
-                            commits_res = requests.get(commits_url, headers=headers)
-                            if commits_res.status_code == 200:
-                                commits = commits_res.json()
-                                if commits and isinstance(commits, list) and len(commits) > 0:
-                                    commit = commits[0]
-                                    db_item = {
-                                        "commit_sha": commit.get("sha", ""),
-                                        "commit_msg": commit.get("commit", {}).get("message", "Commit"),
-                                        "author": commit.get("commit", {}).get("author", {}).get("name", "Unknown"),
-                                        "repository": repo_name,
-                                        "timestamp": commit.get("commit", {}).get("author", {}).get("date", ""),
-                                        "workflow_run_id": "PAT_SYNC",
-                                        "status": "completed",
-                                        "conclusion": "success"
-                                    }
+                    try:
+                        runs_url = f"https://api.github.com/repos/{repo_name}/actions/runs?per_page=1"
+                        runs_res = requests.get(runs_url, headers=headers, timeout=3)
+                        db_item = None
+                        if runs_res.status_code == 200:
+                            runs_data = runs_res.json()
+                            runs = runs_data.get("workflow_runs", [])
+                            if runs:
+                                run = runs[0]
+                                db_item = {
+                                    "commit_sha": run.get("head_sha", ""),
+                                    "commit_msg": run.get("head_commit", {}).get("message", "Commit"),
+                                    "author": run.get("head_commit", {}).get("author", {}).get("name", "Unknown"),
+                                    "repository": repo_name,
+                                    "timestamp": run.get("updated_at", run.get("created_at", "")),
+                                    "workflow_run_id": str(run.get("id", "")),
+                                    "status": run.get("status"),
+                                    "conclusion": run.get("conclusion")
+                                }
+                            else:
+                                # Fallback to commit if no workflow runs exist
+                                commits_url = f"https://api.github.com/repos/{repo_name}/commits?per_page=1"
+                                commits_res = requests.get(commits_url, headers=headers, timeout=3)
+                                if commits_res.status_code == 200:
+                                    commits = commits_res.json()
+                                    if commits and isinstance(commits, list) and len(commits) > 0:
+                                        commit = commits[0]
+                                        db_item = {
+                                            "commit_sha": commit.get("sha", ""),
+                                            "commit_msg": commit.get("commit", {}).get("message", "Commit"),
+                                            "author": commit.get("commit", {}).get("author", {}).get("name", "Unknown"),
+                                            "repository": repo_name,
+                                            "timestamp": commit.get("commit", {}).get("author", {}).get("date", ""),
+                                            "workflow_run_id": "PAT_SYNC",
+                                            "status": "completed",
+                                            "conclusion": "success"
+                                        }
+                    except requests.exceptions.RequestException:
+                        # If a request times out or fails, skip fetching for this repo to prevent breaking others
+                        db_item = None
                     
                     if not db_item:
                         db_item = {
