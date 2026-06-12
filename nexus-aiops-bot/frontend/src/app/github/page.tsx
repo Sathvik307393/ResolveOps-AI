@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
-import { GitBranch, User, Clock, CheckCircle, XCircle, AlertCircle, Activity, RefreshCw, Bot, Terminal } from "lucide-react";
+import { GitBranch, User, Clock, CheckCircle, XCircle, AlertCircle, Activity, RefreshCw, Bot, Terminal, Play } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
 interface DeploymentEvent {
@@ -26,6 +26,25 @@ export default function GitHubDeployments() {
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  const handleRunPipeline = async (repository: string, workflow_run_id: string) => {
+    try {
+      const res = await fetch("/api/v1/github/workflows/run", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("jwt_token")}`,
+        },
+        body: JSON.stringify({ repository, workflow_id: workflow_run_id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to run pipeline");
+      alert(data.message || "Pipeline triggered successfully");
+      fetchData(); // Refresh UI
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
 
   const handleDiagnose = async (repository: string, workflow_run_id: string) => {
     setDiagnoseModal({ isOpen: true, loading: true });
@@ -178,18 +197,36 @@ export default function GitHubDeployments() {
                             <XCircle size={12} /> Failed
                           </span>
                           {deploy.workflow_run_id && deploy.workflow_run_id !== "PAT_SYNC" && (
-                            <button 
-                              onClick={() => handleDiagnose(deploy.repository, deploy.workflow_run_id!)}
-                              className="bg-primary/10 hover:bg-primary/20 text-primary px-2.5 py-1 rounded-md text-[10px] font-semibold border border-primary/30 transition-all flex items-center gap-1.5 hover:shadow-md"
-                            >
-                              <Bot size={12} /> Diagnose
-                            </button>
+                            <>
+                              <button 
+                                onClick={() => handleDiagnose(deploy.repository, deploy.workflow_run_id!)}
+                                className="bg-primary/10 hover:bg-primary/20 text-primary px-2.5 py-1 rounded-md text-[10px] font-semibold border border-primary/30 transition-all flex items-center gap-1.5 hover:shadow-md"
+                              >
+                                <Bot size={12} /> Diagnose
+                              </button>
+                              <button 
+                                onClick={() => handleRunPipeline(deploy.repository, deploy.workflow_run_id!)}
+                                className="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-2.5 py-1 rounded-md text-[10px] font-semibold border border-indigo-500/30 transition-all flex items-center gap-1.5 hover:shadow-md"
+                              >
+                                <Play size={12} /> Run
+                              </button>
+                            </>
                           )}
                         </div>
                       ) : (
-                        <span className="bg-emerald-500/10 text-emerald-500 px-2.5 py-1 rounded-md text-[10px] font-semibold border border-emerald-500/20 flex items-center gap-1.5 shadow-sm">
-                          <CheckCircle size={12} /> Complete
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="bg-emerald-500/10 text-emerald-500 px-2.5 py-1 rounded-md text-[10px] font-semibold border border-emerald-500/20 flex items-center gap-1.5 shadow-sm">
+                            <CheckCircle size={12} /> Complete
+                          </span>
+                          {deploy.workflow_run_id && deploy.workflow_run_id !== "PAT_SYNC" && (
+                            <button 
+                              onClick={() => handleRunPipeline(deploy.repository, deploy.workflow_run_id!)}
+                              className="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-2.5 py-1 rounded-md text-[10px] font-semibold border border-indigo-500/30 transition-all flex items-center gap-1.5 hover:shadow-md"
+                            >
+                              <Play size={12} /> Run
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                     

@@ -34,7 +34,7 @@ export default function IntegrationsManager() {
   const [azureClient, setAzureClient] = useState("");
   const [azureSecret, setAzureSecret] = useState("");
   const [showAzureSecret, setShowAzureSecret] = useState(false);
-  const [githubRepo, setGithubRepo] = useState("");
+  const [githubEmail, setGithubEmail] = useState("");
   const [githubToken, setGithubToken] = useState("");
 
   const loadIntegrations = () => {
@@ -88,7 +88,7 @@ export default function IntegrationsManager() {
       setGithubPat("");
       setAwsRole("");
       setAzureSecret("");
-      setGithubRepo("");
+      setGithubEmail("");
       setGithubToken("");
     } catch (err: any) {
       alert(err.message || "Failed to update integration connection");
@@ -211,15 +211,17 @@ export default function IntegrationsManager() {
               <p className="text-xs text-slate-500 leading-relaxed">
                 Provide your GitHub repository details and a Personal Access Token (PAT) to authorize workflow and deployment synchronization.
               </p>
-              <div className="space-y-3 pt-2">
+              <div className="space-y-4 mt-6">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Repository Name</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    GitHub Email
+                  </label>
                   <input
-                    type="text"
-                    value={githubRepo}
-                    onChange={(e) => setGithubRepo(e.target.value)}
-                    placeholder="e.g., owner/repository"
-                    className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none focus:border-indigo-500/50"
+                    type="email"
+                    value={githubEmail}
+                    onChange={(e) => setGithubEmail(e.target.value)}
+                    placeholder="e.g. user@example.com"
+                    className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
                   />
                 </div>
                 <div>
@@ -230,8 +232,8 @@ export default function IntegrationsManager() {
                     onChange={(e) => setGithubToken(e.target.value)}
                     className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none focus:border-indigo-500/50"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1.5 leading-tight">
-                    <strong>Note:</strong> When creating a Classic PAT, only select the <code className="text-indigo-400 bg-indigo-400/10 px-1 py-0.5 rounded">repo</code> scope. Do not select <code className="text-rose-400 bg-rose-400/10 px-1 py-0.5 rounded">write:packages</code> or other unnecessary scopes.
+                  <p className="text-[10px] text-slate-500 leading-relaxed mt-2">
+                    <strong className="text-slate-400">Note:</strong> When creating a Classic PAT, select both the <code className="bg-indigo-500/20 text-indigo-400 px-1 py-0.5 rounded">repo</code> and <code className="bg-indigo-500/20 text-indigo-400 px-1 py-0.5 rounded">workflow</code> scopes so Nexus AI can read and run pipelines. Do not select <code className="bg-rose-500/20 text-rose-400 px-1 py-0.5 rounded">write:packages</code> or other unnecessary scopes.
                   </p>
                 </div>
               </div>
@@ -243,8 +245,13 @@ export default function IntegrationsManager() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleToggleConnect(activeModal as keyof IntegrationsState, true, { repo_fullname: githubRepo, github_token: githubToken })}
-                  disabled={!githubRepo || !githubToken}
+                  onClick={() => {
+                    handleToggleConnect("github", true, { 
+                      github_token: githubToken, 
+                      github_email: githubEmail 
+                    });
+                  }}
+                  disabled={!githubEmail || !githubToken}
                   className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50 cursor-pointer"
                 >
                   Verify & Connect

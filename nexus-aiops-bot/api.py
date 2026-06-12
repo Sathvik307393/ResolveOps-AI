@@ -938,6 +938,43 @@ def diagnose_github_pipeline(req: DiagnoseRequest, current_user: dict = Depends(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class RunWorkflowRequest(BaseModel):
+    repository: str
+    workflow_id: str
+    branch: str = "main"
+
+@app.post("/api/v1/github/workflows/run")
+def run_github_workflow(req: RunWorkflowRequest, current_user: dict = Depends(get_current_user)):
+    """Triggers a GitHub Actions workflow manually."""
+    try:
+        tenant_email = current_user.get("email")
+        tenant_data = get_user_integrations(tenant_email)
+        pat = tenant_data.get("github", {}).get("credentials", {}).get("github_token")
+        
+        if not pat:
+            raise HTTPException(status_code=400, detail="GitHub PAT not found")
+            
+        headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
+        
+        # Trigger workflow dispatch or rerun
+        if req.workflow_id.isdigit():
+            # Rerun existing workflow run
+            dispatch_url = f"https://api.github.com/repos/{req.repository}/actions/runs/{req.workflow_id}/rerun"
+            r = requests.post(dispatch_url, headers=headers)
+        else:
+            dispatch_url = f"https://api.github.com/repos/{req.repository}/actions/workflows/{req.workflow_id}/dispatches"
+            payload = {"ref": req.branch}
+            r = requests.post(dispatch_url, headers=headers, json=payload)
+            
+        if r.status_code not in [204, 201]:
+            raise HTTPException(status_code=400, detail=f"Failed to trigger workflow: {r.text}")
+            
+        return {"status": "success", "message": f"Successfully triggered workflow in {req.repository}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/v1/k8s/resources")
 def get_k8s_resources(current_user: dict = Depends(get_current_user)):
     """Returns cluster nodes, active pods, and deployment states for AKS/EKS dashboard visualization."""
@@ -1031,7 +1068,7 @@ def get_integrations(current_user: dict = Depends(get_current_user)):
             if k in integrations and integrations[k].get("connected"):
                 status_map[k] = True
                 if k == "github":
-                    status_map["github_details"] = integrations[k].get("credentials", {}).get("repo_fullname")
+                    status_map["github_details"] = integrations[k].get("credentials", {}).get("github_username")
                 
         return status_map
     except Exception as e:
@@ -1051,33 +1088,34 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
             
         if req.connected and service_key == "github" and req.credentials:
             github_token = req.credentials.get("github_token")
-            repo_fullname = req.credentials.get("repo_fullname")
+            github_email = req.credentials.get("github_email")
             
-            if github_token and repo_fullname:
-                repo_parts = repo_fullname.split("/")
-                if len(repo_parts) != 2:
-                    raise HTTPException(status_code=400, detail="Repository name must be in the format 'owner/repo'")
-                requested_owner = repo_parts[0]
-                
+            if github_token and github_email:
                 headers = {
                     "Accept": "application/vnd.github+json",
                     "X-GitHub-Api-Version": "2022-11-28",
                     "Authorization": f"token {github_token}"
                 }
-                r = requests.get("https://api.github.com/user", headers=headers, timeout=5)
-                if r.status_code != 200:
-                    raise HTTPException(status_code=400, detail="Invalid GitHub Personal Access Token")
                 
-                user_data = r.json()
-                github_login = user_data.get("login")
+                # Verify emails
+                r_emails = requests.get("https://api.github.com/user/emails", headers=headers, timeout=5)
+                if r_emails.status_code != 200:
+                    raise HTTPException(status_code=400, detail="Invalid GitHub Personal Access Token or missing 'user:email' scope")
                 
-                if not github_login:
+                emails_data = r_emails.json()
+                verified_emails = [e.get("email").lower() for e in emails_data if e.get("verified")]
+                
+                r_user = requests.get("https://api.github.com/user", headers=headers, timeout=5)
+                if r_user.status_code != 200:
                     raise HTTPException(status_code=400, detail="Could not determine GitHub account from PAT")
                 
-                if requested_owner.lower() != github_login.lower():
+                user_data = r_user.json()
+                github_login = user_data.get("login")
+                
+                if github_email.lower() not in verified_emails and github_email.lower() != github_login.lower():
                     raise HTTPException(
                         status_code=400, 
-                        detail=f"This PAT belongs to account '{github_login}', but you are trying to connect a repository owned by '{requested_owner}'. You can only connect your own repositories."
+                        detail=f"The provided email/username '{github_email}' does not match the GitHub account associated with this PAT. Verified login is '{github_login}'."
                     )
                 
                 req.credentials["github_username"] = github_login
@@ -1099,7 +1137,7 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
             if k in integrations and integrations[k].get("connected"):
                 status_map[k] = True
                 if k == "github":
-                    status_map["github_details"] = integrations[k].get("credentials", {}).get("repo_fullname")
+                    status_map["github_details"] = integrations[k].get("credentials", {}).get("github_username")
                 
         return {"status": "success", "message": f"{req.service} connection status updated", "integrations": status_map}
     except HTTPException:
