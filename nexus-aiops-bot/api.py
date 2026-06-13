@@ -810,13 +810,8 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
                             runs_data = runs_res.json()
                             runs = runs_data.get("workflow_runs", [])
                             
-                            seen_workflows = set()
-                            for run in runs:
-                                wf_id = run.get("workflow_id")
-                                if wf_id in seen_workflows:
-                                    continue
-                                seen_workflows.add(wf_id)
-                                
+                            if runs:
+                                run = runs[0]
                                 repo_items.append({
                                     "commit_sha": run.get("head_sha", ""),
                                     "commit_msg": (run.get("head_commit") or {}).get("message", "Commit"),
