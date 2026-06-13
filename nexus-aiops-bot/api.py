@@ -782,8 +782,8 @@ def get_github_deployments(background_tasks: BackgroundTasks, current_user: dict
             headers = {"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github.v3+json"}
             repos = []
             
-            # 1. Owned Repositories Only (Restricting to PAT owner)
-            owner_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=100&affiliation=owner", headers=headers, timeout=5)
+            # 1. All accessible repositories
+            owner_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=100&affiliation=owner,collaborator,organization_member", headers=headers, timeout=5)
             if owner_res.status_code == 200:
                 repos.extend(owner_res.json())
                 
