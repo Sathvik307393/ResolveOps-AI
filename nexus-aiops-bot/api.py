@@ -1322,7 +1322,7 @@ def get_cloud_resources(current_user: dict = Depends(get_current_user)):
                     
                     for sub in subs:
                         resource_client = ResourceManagementClient(credential, sub.subscription_id)
-                        # Fetch all resources
+                        # Fetch all standard resources
                         all_resources = resource_client.resources.list()
                         for r in all_resources:
                             resources.append({
@@ -1331,6 +1331,18 @@ def get_cloud_resources(current_user: dict = Depends(get_current_user)):
                                 "type": r.type.split('/')[-1] if r.type else "Azure Resource",
                                 "provider": "Azure",
                                 "region": r.location,
+                                "status": "active"
+                            })
+                            
+                        # Also fetch resource groups since they act as containers and might be empty
+                        resource_groups = resource_client.resource_groups.list()
+                        for rg in resource_groups:
+                            resources.append({
+                                "id": rg.id,
+                                "name": rg.name,
+                                "type": "Resource Group",
+                                "provider": "Azure",
+                                "region": rg.location,
                                 "status": "active"
                             })
                 except Exception as e:
