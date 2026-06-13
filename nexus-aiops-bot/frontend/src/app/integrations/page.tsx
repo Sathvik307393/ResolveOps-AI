@@ -32,6 +32,8 @@ export default function IntegrationsManager() {
   const [azureClient, setAzureClient] = useState("");
   const [azureSecret, setAzureSecret] = useState("");
   const [showAzureSecret, setShowAzureSecret] = useState(false);
+  const [azureScope, setAzureScope] = useState<"account" | "application">("account");
+  const [azureSubscription, setAzureSubscription] = useState("");
   const [githubEmail, setGithubEmail] = useState("");
   const [githubToken, setGithubToken] = useState("");
 
@@ -95,6 +97,7 @@ export default function IntegrationsManager() {
       setAwsAccessKey("");
       setAwsSecretKey("");
       setAzureSecret("");
+      setAzureSubscription("");
       setGithubEmail("");
       setGithubToken("");
     } catch (err: any) {
@@ -341,6 +344,41 @@ export default function IntegrationsManager() {
                 <strong className="text-slate-400">Hint:</strong> You can find these details in the Azure Portal under <strong>Microsoft Entra ID &gt; App Registrations</strong>.
               </p>
               <div className="space-y-3 pt-2">
+                <div className="flex bg-[#0a0a0f] p-1 rounded-lg border border-slate-800 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setAzureScope("account")}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                      azureScope === "account" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-300"
+                    }`}
+                  >
+                    Entire Account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAzureScope("application")}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                      azureScope === "application" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-300"
+                    }`}
+                  >
+                    Specific Application
+                  </button>
+                </div>
+
+                {azureScope === "account" && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                      Subscription ID
+                    </label>
+                    <input
+                      type="text"
+                      value={azureSubscription}
+                      onChange={(e) => setAzureSubscription(e.target.value)}
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                      className="w-full bg-[#0a0a0f] border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs font-mono focus:outline-none"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
                     Tenant ID <span className="normal-case font-normal text-slate-500 ml-1">(Directory ID)</span>
@@ -395,8 +433,8 @@ export default function IntegrationsManager() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleToggleConnect("azure", true, { client_id: azureClient, client_secret: azureSecret, tenant_id: azureTenant })}
-                  disabled={!azureTenant || !azureClient || !azureSecret}
+                  onClick={() => handleToggleConnect("azure", true, { scope: azureScope, subscription_id: azureSubscription, client_id: azureClient, client_secret: azureSecret, tenant_id: azureTenant })}
+                  disabled={!azureTenant || !azureClient || !azureSecret || (azureScope === "account" && !azureSubscription)}
                   className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-50 cursor-pointer"
                 >
                   Authenticate Azure
