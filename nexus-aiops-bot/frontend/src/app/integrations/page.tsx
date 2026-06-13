@@ -343,6 +343,11 @@ export default function IntegrationsManager() {
                 <br />
                 <strong className="text-slate-400">Hint:</strong> You can find these details in the Azure Portal under <strong>Microsoft Entra ID &gt; App Registrations</strong>.
               </p>
+              <div className="bg-sky-500/10 border border-sky-500/20 rounded-lg p-3">
+                <p className="text-[10px] text-sky-400/90 leading-relaxed">
+                  <strong className="text-sky-400">CRITICAL REQUIREMENT:</strong> After creating the App Registration, you must go to your target Subscription or Resource's <strong>Access control (IAM)</strong> tab and assign the <strong>Reader</strong> or <strong>Monitoring Reader</strong> role to your new application. Without this role, Azure will block Nexus AI from seeing any of your resources!
+                </p>
+              </div>
               <div className="space-y-3 pt-2">
                 <div className="flex bg-[#0a0a0f] p-1 rounded-lg border border-slate-800 mb-4">
                   <button
