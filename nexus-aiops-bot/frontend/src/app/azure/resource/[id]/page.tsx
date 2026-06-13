@@ -13,6 +13,8 @@ interface ResourceDetails {
   type: string;
   location: string;
   tags?: Record<string, string>;
+  tenant_id?: string;
+  user_email?: string;
 }
 
 interface ActivityLog {

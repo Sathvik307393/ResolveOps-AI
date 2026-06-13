@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { fetchApi } from "@/lib/api";
-import { Cloud, Server, Database, Activity, RefreshCw, Github, Box, Settings, ArrowRight } from "lucide-react";
+import { Cloud, Server, Database, Activity, RefreshCw, GitBranch, Box, Settings, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 export default function CloudResourcesDashboard() {
@@ -154,7 +154,7 @@ export default function CloudResourcesDashboard() {
             
             <div className="flex justify-between items-start mb-6">
               <div className="p-3 bg-purple-500/10 rounded-xl text-purple-400 border border-purple-500/20">
-                <Github size={28} />
+                <GitBranch size={28} />
               </div>
               {isGithubConnected ? (
                 <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-emerald-500/20">Connected</span>
