@@ -47,7 +47,11 @@ export default function ResourceDetailsPage() {
       fetchApi(`/api/v1/cloud/azure/activity?resource_id=${encodeURIComponent(resourceId)}`).catch(() => [])
     ]).then(([resData, activityData]) => {
       if (resData.details) {
-        setDetails(resData.details);
+        setDetails({
+          ...resData.details,
+          tenant_id: resData.tenant_id,
+          user_email: resData.user_email
+        });
         setChildren(resData.children || []);
       }
       setActivities(Array.isArray(activityData) ? activityData : []);
@@ -121,7 +125,16 @@ export default function ResourceDetailsPage() {
                 {details.location}
               </span>
             </div>
-            <h1 className="text-3xl font-bold text-white mb-6">{details.name}</h1>
+            <h1 className="text-3xl font-bold text-white mb-2">{details.name}</h1>
+            
+            <div className="flex items-center gap-2 mb-6">
+              <span className="text-[11px] text-slate-400 bg-slate-800/80 px-2 py-1 rounded border border-slate-700/50">
+                Connected User: <strong className="text-slate-200">{details.user_email || "Unknown"}</strong>
+              </span>
+              <span className="text-[11px] text-slate-400 bg-slate-800/80 px-2 py-1 rounded border border-slate-700/50">
+                Tenant: <strong className="text-slate-200">{details.tenant_id ? details.tenant_id.substring(0, 8) + "..." : "Unknown"}</strong>
+              </span>
+            </div>
             
             {details.tags && Object.keys(details.tags).length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -239,7 +252,7 @@ export default function ResourceDetailsPage() {
                 <div className="flex items-start gap-3 mb-4">
                   <AlertTriangle className="text-amber-400 shrink-0" size={20} />
                   <p className="text-sm text-slate-300">
-                    To view application logs, metrics, and terminal access for this specific resource, use the <strong>Azure Hub</strong> or <strong>Kubernetes Explorer</strong>.
+                    To view deeper application logs, metrics, and terminal access for this specific resource, use the <strong>Azure Hub</strong> directly.
                   </p>
                 </div>
                 <button 

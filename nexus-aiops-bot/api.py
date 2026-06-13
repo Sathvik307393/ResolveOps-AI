@@ -1409,8 +1409,8 @@ class AnalyzeFailureRequest(BaseModel):
 def get_azure_resource_details(resource_id: str, current_user: dict = Depends(get_current_user)):
     try:
         tenant_email = current_user.get("email")
-        from database import get_integration_profile
-        integrations = get_integration_profile(tenant_email)
+        from database import get_user_integrations
+        integrations = get_user_integrations(tenant_email)
         azure_creds = integrations.get("azure", {}).get("credentials", {})
         client_id = azure_creds.get("client_id")
         client_secret = azure_creds.get("client_secret")
@@ -1471,7 +1471,7 @@ def get_azure_resource_details(resource_id: str, current_user: dict = Depends(ge
                 "tags": r.tags
             }
             
-        return {"details": details, "children": children}
+        return {"details": details, "children": children, "tenant_id": azure_tenant, "user_email": tenant_email}
     except Exception as e:
         print(f"Error fetching resource details: {e}")
         raise HTTPException(status_code=500, detail=str(e))

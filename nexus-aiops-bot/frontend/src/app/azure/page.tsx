@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Cloud, Server, Database, AppWindow, Hexagon, Activity, CheckCircle, AlertTriangle, AlertCircle, RefreshCw } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import Link from "next/link";
 
 interface CloudResource {
   id: string;
@@ -147,7 +148,7 @@ export default function AzureHub() {
                   const formattedType = r.type.replace(/([A-Z])/g, ' $1').trim().replace(/^./, str => str.toUpperCase()) || r.type;
                   
                   return (
-                    <div key={i} className="p-4 flex justify-between items-center hover:bg-white/[0.04] transition-colors group cursor-default">
+                    <Link href={`/azure/resource/${encodeURIComponent(r.id)}`} key={i} className="p-4 flex justify-between items-center hover:bg-white/[0.04] transition-colors group cursor-pointer border-l-2 border-transparent hover:border-sky-500 block">
                       <div className="flex items-start gap-3 overflow-hidden pr-4">
                         <div className="p-2.5 bg-slate-800/80 rounded-lg border border-slate-700/50 text-sky-400 shrink-0 mt-0.5 group-hover:bg-sky-500/10 group-hover:border-sky-500/20 group-hover:text-sky-300 transition-colors shadow-sm">
                           {getResourceIcon(r.type)}
@@ -160,7 +161,7 @@ export default function AzureHub() {
                           </div>
                         </div>
                       </div>
-                      <div className="shrink-0">
+                      <div className="shrink-0 flex items-center gap-3">
                         <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border flex items-center gap-1.5 shadow-sm capitalize tracking-wide ${
                           r.status.toLowerCase() === 'active' || r.status.toLowerCase() === 'running'
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
@@ -172,7 +173,7 @@ export default function AzureHub() {
                           {r.status}
                         </span>
                       </div>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>

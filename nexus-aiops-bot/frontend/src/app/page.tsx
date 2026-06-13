@@ -4,25 +4,30 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { fetchApi } from "@/lib/api";
-import { Cloud, Server, Database, Activity, CheckCircle, RefreshCw, ServerCog, Cpu, Hexagon } from "lucide-react";
+import { Cloud, Server, Database, Activity, RefreshCw, Github, Box, Settings, ArrowRight } from "lucide-react";
 import Link from "next/link";
-
-interface CloudResource {
-  id: string;
-  name: string;
-  type: string;
-  provider: "AWS" | "Azure";
-  region: string;
-  status: string;
-  selected: boolean;
-}
 
 export default function CloudResourcesDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [resources, setResources] = useState<CloudResource[]>([]);
   const [integrations, setIntegrations] = useState<any>({});
-  const [saving, setSaving] = useState(false);
+  const [stats, setStats] = useState<{aws: number, azure: number}>({aws: 0, azure: 0});
+
+  const fetchData = () => {
+    setLoading(true);
+    Promise.all([
+      fetchApi("/api/v1/integrations").catch(() => ({})),
+      fetchApi("/api/v1/cloud/resources").catch(() => [])
+    ]).then(([integData, resData]) => {
+      setIntegrations(integData);
+      
+      const awsCount = Array.isArray(resData) ? resData.filter(r => r.provider === "AWS").length : 0;
+      const azureCount = Array.isArray(resData) ? resData.filter(r => r.provider === "Azure").length : 0;
+      setStats({ aws: awsCount, azure: azureCount });
+      
+      setLoading(false);
+    });
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("jwt_token");
@@ -30,38 +35,8 @@ export default function CloudResourcesDashboard() {
       router.push("/login");
       return;
     }
-    
-    Promise.all([
-      fetchApi("/api/v1/integrations").catch(() => ({})),
-      fetchApi("/api/v1/cloud/resources").catch(() => [])
-    ]).then(([integData, resData]) => {
-      setIntegrations(integData);
-      setResources(Array.isArray(resData) ? resData : []);
-      setLoading(false);
-    });
+    fetchData();
   }, [router]);
-
-  const handleToggleSelection = (id: string) => {
-    setResources(prev => prev.map(r => r.id === id ? { ...r, selected: !r.selected } : r));
-  };
-
-  const handleSaveSelection = async () => {
-    setSaving(true);
-    try {
-      const selectedIds = resources.filter(r => r.selected).map(r => r.id);
-      await fetchApi("/api/v1/cloud/resources/select", {
-        method: "POST",
-        body: JSON.stringify({ selected_ids: selectedIds })
-      });
-      alert("Cloud resources successfully synchronized with Nexus AI Engine!");
-    } catch (err: any) {
-      alert(err.message || "Failed to save selections");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const hasCloudConnected = integrations.aws || integrations.azure;
 
   if (loading) {
     return (
@@ -73,139 +48,141 @@ export default function CloudResourcesDashboard() {
     );
   }
 
-  if (!hasCloudConnected) {
-    return (
-      <DashboardLayout>
-        <div className="min-h-[70vh] flex flex-col items-center justify-center text-center">
-          <div className="w-20 h-20 rounded-full bg-slate-800/50 flex items-center justify-center mb-6">
-            <Cloud className="text-slate-500 w-10 h-10" />
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-2">No Cloud Accounts Connected</h2>
-          <p className="text-slate-400 max-w-md mb-8">
-            Connect your AWS or Azure accounts in the Integrations settings to automatically discover and monitor your cloud infrastructure.
-          </p>
-          <Link href="/integrations" className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
-            Configure Integrations
-          </Link>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  const awsResources = resources.filter(r => r.provider === "AWS");
-  const azureResources = resources.filter(r => r.provider === "Azure");
-
-  const renderResourceCard = (r: CloudResource) => {
-    const isAws = r.provider === "AWS";
-    const Icon = r.type.includes("EKS") || r.type.includes("AKS") ? Cpu : r.type.includes("VM") || r.type.includes("EC2") ? Server : Hexagon;
-    const color = isAws ? "text-amber-400" : "text-sky-400";
-    const bg = isAws ? "bg-amber-400/10" : "bg-sky-400/10";
-    
-    return (
-      <div 
-        key={r.id} 
-        className={`glass-panel border-2 rounded-xl p-5 transition-all relative overflow-hidden group ${
-          r.selected ? "border-indigo-500 bg-indigo-500/5" : "border-slate-800 hover:border-slate-700 hover:bg-white/5"
-        }`}
-      >
-        <Link href={`/azure/resource/${encodeURIComponent(r.id)}`} className="absolute inset-0 z-0"></Link>
-        <div className="flex justify-between items-start mb-4 relative z-10">
-          <div className={`p-2.5 rounded-lg ${bg} ${color}`}>
-            <Icon size={20} />
-          </div>
-          <button 
-            onClick={(e) => { e.preventDefault(); handleToggleSelection(r.id); }}
-            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center cursor-pointer transition-colors ${
-              r.selected ? "border-indigo-500 bg-indigo-500" : "border-slate-600 hover:border-indigo-400"
-            }`}
-          >
-            {r.selected && <CheckCircle size={12} className="text-white" />}
-          </button>
-        </div>
-        <div className="relative z-10 pointer-events-none">
-          <h4 className="text-white font-medium text-sm truncate" title={r.name}>{r.name}</h4>
-          <div className="flex items-center space-x-2 mt-2">
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 uppercase tracking-wider">{r.type}</span>
-            <span className="text-[10px] text-slate-500 font-mono">{r.region}</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const isAwsConnected = integrations.aws?.connected;
+  const isAzureConnected = integrations.azure?.connected;
+  const isGithubConnected = integrations.github?.connected;
 
   return (
     <DashboardLayout>
       <div className="flex flex-col h-full font-sans pb-10">
         <div className="flex justify-between items-end mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-white mb-2">Cloud Resources Dashboard</h1>
+            <h1 className="text-2xl font-bold text-white mb-2">Global Platform Overview</h1>
             <p className="text-sm text-slate-400">
-              Select the cloud instances, clusters, and databases you want Nexus AI to actively monitor and analyze.
+              High-level status of your connected cloud environments and developer toolchains.
             </p>
           </div>
-          <div className="flex gap-3">
-            <button 
-              onClick={() => window.location.reload()}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors"
-            >
-              <RefreshCw size={16} /> Refresh Data
-            </button>
-            <button 
-              onClick={handleSaveSelection}
-              disabled={saving}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
-            >
-              {saving ? <Activity size={16} className="animate-spin" /> : <ServerCog size={16} />}
-              Save Active Monitor List
-            </button>
-          </div>
+          <button 
+            onClick={fetchData}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors border border-slate-700"
+          >
+            <RefreshCw size={16} /> Refresh Status
+          </button>
         </div>
 
-        {resources.length === 0 ? (
-          <div className="glass-panel border border-slate-800 rounded-xl p-10 flex flex-col items-center justify-center text-center mt-4">
-            <Cloud className="text-slate-500 w-10 h-10 mb-4" />
-            <h3 className="text-lg font-bold text-white mb-2">No Resources Found</h3>
-            <p className="text-sm text-slate-400 max-w-md">
-              We couldn't find any supported cloud resources (like Virtual Machines or Clusters) in your connected accounts, or Nexus AI does not have permission to view them.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-10">
-            {integrations.aws && (
-              <div>
-                <div className="flex items-center gap-3 mb-4 border-b border-slate-800 pb-2">
-                  <div className="w-2 h-2 rounded-full bg-amber-400 glow-orange"></div>
-                  <h3 className="text-base font-semibold text-slate-200">Amazon Web Services (AWS)</h3>
-                  <span className="text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full font-mono">{awsResources.length} items</span>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          
+          {/* Azure Card */}
+          <div className="glass-panel border border-slate-800 rounded-2xl p-6 flex flex-col relative overflow-hidden group hover:border-sky-500/50 transition-all cursor-default">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-sky-500/20"></div>
+            
+            <div className="flex justify-between items-start mb-6">
+              <div className="p-3 bg-sky-500/10 rounded-xl text-sky-400 border border-sky-500/20">
+                <Cloud size={28} />
+              </div>
+              {isAzureConnected ? (
+                <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-emerald-500/20">Connected</span>
+              ) : (
+                <span className="px-2.5 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-slate-700">Not Configured</span>
+              )}
+            </div>
+            
+            <h2 className="text-xl font-bold text-white mb-2">Microsoft Azure</h2>
+            
+            {isAzureConnected ? (
+              <div className="flex-1">
+                <p className="text-sm text-slate-400 mb-6">Actively monitoring Azure subscriptions and resource groups.</p>
+                <div className="flex items-end gap-2 mb-6">
+                  <span className="text-4xl font-black text-white">{stats.azure}</span>
+                  <span className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Resources Discovered</span>
                 </div>
-                {awsResources.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {awsResources.map(renderResourceCard)}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500 italic px-4">No compatible AWS resources found in this region.</p>
-                )}
+                <Link href="/azure" className="w-full flex justify-center items-center gap-2 py-3 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded-xl font-semibold transition-colors border border-sky-500/20 group-hover:bg-sky-500 group-hover:text-white">
+                  Enter Azure Hub <ArrowRight size={16} />
+                </Link>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col justify-end">
+                <p className="text-sm text-slate-500 mb-6">Connect your Azure account to monitor infrastructure.</p>
+                <Link href="/integrations" className="w-full flex justify-center items-center gap-2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold transition-colors border border-slate-700">
+                  <Settings size={16} /> Configure
+                </Link>
               </div>
             )}
+          </div>
 
-            {integrations.azure && (
-              <div>
-                <div className="flex items-center gap-3 mb-4 border-b border-slate-800 pb-2">
-                  <div className="w-2 h-2 rounded-full bg-sky-400 glow-blue"></div>
-                  <h3 className="text-base font-semibold text-slate-200">Microsoft Azure</h3>
-                  <span className="text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full font-mono">{azureResources.length} items</span>
+          {/* AWS Card */}
+          <div className="glass-panel border border-slate-800 rounded-2xl p-6 flex flex-col relative overflow-hidden group hover:border-amber-500/50 transition-all cursor-default">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-amber-500/20"></div>
+            
+            <div className="flex justify-between items-start mb-6">
+              <div className="p-3 bg-amber-500/10 rounded-xl text-amber-400 border border-amber-500/20">
+                <Box size={28} />
+              </div>
+              {isAwsConnected ? (
+                <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-emerald-500/20">Connected</span>
+              ) : (
+                <span className="px-2.5 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-slate-700">Not Configured</span>
+              )}
+            </div>
+            
+            <h2 className="text-xl font-bold text-white mb-2">Amazon Web Services</h2>
+            
+            {isAwsConnected ? (
+              <div className="flex-1">
+                <p className="text-sm text-slate-400 mb-6">Actively monitoring EC2, EKS, and S3 resources.</p>
+                <div className="flex items-end gap-2 mb-6">
+                  <span className="text-4xl font-black text-white">{stats.aws}</span>
+                  <span className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Resources Discovered</span>
                 </div>
-                {azureResources.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {azureResources.map(renderResourceCard)}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500 italic px-4">No compatible Azure resources found in this tenant.</p>
-                )}
+                <button disabled className="w-full flex justify-center items-center gap-2 py-3 bg-slate-800 text-slate-500 rounded-xl font-semibold border border-slate-700 cursor-not-allowed">
+                  AWS Hub (Coming Soon)
+                </button>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col justify-end">
+                <p className="text-sm text-slate-500 mb-6">Connect your AWS account to monitor infrastructure.</p>
+                <Link href="/integrations" className="w-full flex justify-center items-center gap-2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold transition-colors border border-slate-700">
+                  <Settings size={16} /> Configure
+                </Link>
               </div>
             )}
           </div>
-        )}
+
+          {/* GitHub Card */}
+          <div className="glass-panel border border-slate-800 rounded-2xl p-6 flex flex-col relative overflow-hidden group hover:border-purple-500/50 transition-all cursor-default">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-purple-500/20"></div>
+            
+            <div className="flex justify-between items-start mb-6">
+              <div className="p-3 bg-purple-500/10 rounded-xl text-purple-400 border border-purple-500/20">
+                <Github size={28} />
+              </div>
+              {isGithubConnected ? (
+                <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-emerald-500/20">Connected</span>
+              ) : (
+                <span className="px-2.5 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-slate-700">Not Configured</span>
+              )}
+            </div>
+            
+            <h2 className="text-xl font-bold text-white mb-2">GitHub Actions</h2>
+            
+            {isGithubConnected ? (
+              <div className="flex-1 flex flex-col justify-end">
+                <p className="text-sm text-slate-400 mb-6">Actively synchronizing CI/CD pipeline telemetry.</p>
+                <Link href="/github" className="w-full flex justify-center items-center gap-2 py-3 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-xl font-semibold transition-colors border border-purple-500/20 group-hover:bg-purple-500 group-hover:text-white">
+                  Enter GitHub Sync <ArrowRight size={16} />
+                </Link>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col justify-end">
+                <p className="text-sm text-slate-500 mb-6">Connect GitHub to monitor CI/CD pipelines.</p>
+                <Link href="/integrations" className="w-full flex justify-center items-center gap-2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold transition-colors border border-slate-700">
+                  <Settings size={16} /> Configure
+                </Link>
+              </div>
+            )}
+          </div>
+
+        </div>
       </div>
     </DashboardLayout>
   );
