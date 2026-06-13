@@ -1309,7 +1309,7 @@ def get_cloud_resources(current_user: dict = Depends(get_current_user)):
                 try:
                     from azure.identity import ClientSecretCredential
                     from azure.mgmt.subscription import SubscriptionClient
-                    from azure.mgmt.compute import ComputeManagementClient
+                    from azure.mgmt.resource import ResourceManagementClient
                     
                     credential = ClientSecretCredential(
                         tenant_id=azure_tenant,
@@ -1321,24 +1321,17 @@ def get_cloud_resources(current_user: dict = Depends(get_current_user)):
                     subs = list(sub_client.subscriptions.list())
                     
                     for sub in subs:
-                        compute_client = ComputeManagementClient(credential, sub.subscription_id)
-                        # Fetch VMs and their instance view to get power state
-                        vms = compute_client.virtual_machines.list_all(status_only="true")
-                        for vm in vms:
-                            status = "unknown"
-                            if vm.instance_view and vm.instance_view.statuses:
-                                for s in vm.instance_view.statuses:
-                                    if s.code and s.code.startswith("PowerState/"):
-                                        status = s.code.split("/")[1]
-                                        break
-                                        
+                        resource_client = ResourceManagementClient(credential, sub.subscription_id)
+                        # Fetch all resources
+                        all_resources = resource_client.resources.list()
+                        for r in all_resources:
                             resources.append({
-                                "id": vm.id,
-                                "name": vm.name,
-                                "type": "Virtual Machine",
+                                "id": r.id,
+                                "name": r.name,
+                                "type": r.type.split('/')[-1] if r.type else "Azure Resource",
                                 "provider": "Azure",
-                                "region": vm.location,
-                                "status": status.lower()
+                                "region": r.location,
+                                "status": "active"
                             })
                 except Exception as e:
                     print(f"Error fetching Azure resources: {e}")

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Cpu, GitBranch, LayoutDashboard, MessageSquareCode, Lightbulb, BarChart3, Settings, LogOut, MessageSquare, Server, Layers, AppWindow, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Cloud, Cpu, GitBranch, LayoutDashboard, MessageSquareCode, Lightbulb, BarChart3, Settings, LogOut, MessageSquare, Server, Layers, AppWindow, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
@@ -56,6 +56,7 @@ export default function Sidebar() {
   const navItems = [
     { name: "Cloud Resources", path: "/", icon: LayoutDashboard },
     ...(integrations.github ? [{ name: "GitHub Sync", path: "/github", icon: GitBranch }] : []),
+    ...(integrations.azure ? [{ name: "Azure Hub", path: "/azure", icon: Cloud }] : []),
     { name: "AI Copilot", path: "/chat", icon: MessageSquareCode },
     { name: "Suggestions", path: "/suggestions", icon: Lightbulb },
     { name: "Analytics", path: "/analytics", icon: BarChart3 },

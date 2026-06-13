@@ -158,10 +158,10 @@ export default function CloudResourcesDashboard() {
 
         {resources.length === 0 ? (
           <div className="glass-panel border border-slate-800 rounded-xl p-10 flex flex-col items-center justify-center text-center mt-4">
-            <Activity className="text-indigo-400 w-10 h-10 mb-4 animate-pulse" />
-            <h3 className="text-lg font-bold text-white mb-2">Discovering Resources...</h3>
+            <Cloud className="text-slate-500 w-10 h-10 mb-4" />
+            <h3 className="text-lg font-bold text-white mb-2">No Resources Found</h3>
             <p className="text-sm text-slate-400 max-w-md">
-              Nexus AI is securely enumerating your cloud infrastructure. This may take a moment depending on your account size.
+              We couldn't find any supported cloud resources (like Virtual Machines or Clusters) in your connected accounts, or Nexus AI does not have permission to view them.
             </p>
           </div>
         ) : (
