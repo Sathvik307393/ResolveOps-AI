@@ -1401,5 +1401,160 @@ def get_cloud_logs(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class AnalyzeFailureRequest(BaseModel):
+    log_message: str
+    resource_id: str
+
+@app.get("/api/v1/cloud/azure/resource")
+def get_azure_resource_details(resource_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_email = current_user.get("email")
+        from database import get_integration_profile
+        integrations = get_integration_profile(tenant_email)
+        azure_creds = integrations.get("azure", {}).get("credentials", {})
+        client_id = azure_creds.get("client_id")
+        client_secret = azure_creds.get("client_secret")
+        azure_tenant = azure_creds.get("tenant_id")
+        
+        if not (client_id and client_secret and azure_tenant):
+            raise HTTPException(status_code=400, detail="Azure not connected")
+
+        from azure.identity import ClientSecretCredential
+        from azure.mgmt.resource import ResourceManagementClient
+        
+        credential = ClientSecretCredential(
+            tenant_id=azure_tenant,
+            client_id=client_id,
+            client_secret=client_secret
+        )
+        
+        # Extract subscription ID from resource_id (format: /subscriptions/{sub_id}/resourceGroups/...)
+        parts = resource_id.split("/")
+        sub_id = parts[2] if len(parts) > 2 else None
+        if not sub_id:
+            raise HTTPException(status_code=400, detail="Invalid resource ID")
+            
+        resource_client = ResourceManagementClient(credential, sub_id)
+        
+        # Check if it's a resource group or resource
+        is_rg = "/providers/" not in resource_id
+        
+        details = {}
+        children = []
+        
+        if is_rg:
+            rg_name = parts[4]
+            rg = resource_client.resource_groups.get(rg_name)
+            details = {
+                "id": rg.id,
+                "name": rg.name,
+                "type": "Resource Group",
+                "location": rg.location,
+                "tags": rg.tags
+            }
+            # Get children
+            res_list = resource_client.resources.list_by_resource_group(rg_name)
+            for r in res_list:
+                children.append({
+                    "id": r.id,
+                    "name": r.name,
+                    "type": r.type,
+                    "location": r.location
+                })
+        else:
+            r = resource_client.resources.get_by_id(resource_id, api_version="2021-04-01") # Using a default generic api version
+            details = {
+                "id": r.id,
+                "name": r.name,
+                "type": r.type,
+                "location": r.location,
+                "tags": r.tags
+            }
+            
+        return {"details": details, "children": children}
+    except Exception as e:
+        print(f"Error fetching resource details: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/cloud/azure/activity")
+def get_azure_resource_activity(resource_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_email = current_user.get("email")
+        from database import get_integration_profile
+        integrations = get_integration_profile(tenant_email)
+        azure_creds = integrations.get("azure", {}).get("credentials", {})
+        client_id = azure_creds.get("client_id")
+        client_secret = azure_creds.get("client_secret")
+        azure_tenant = azure_creds.get("tenant_id")
+        
+        if not (client_id and client_secret and azure_tenant):
+            raise HTTPException(status_code=400, detail="Azure not connected")
+
+        from azure.identity import ClientSecretCredential
+        from azure.mgmt.monitor import MonitorManagementClient
+        
+        credential = ClientSecretCredential(
+            tenant_id=azure_tenant,
+            client_id=client_id,
+            client_secret=client_secret
+        )
+        
+        parts = resource_id.split("/")
+        sub_id = parts[2] if len(parts) > 2 else None
+        
+        monitor_client = MonitorManagementClient(credential, sub_id)
+        
+        # Get logs from last 7 days for this resource
+        today = datetime.utcnow()
+        start = today - timedelta(days=7)
+        filter_str = f"eventTimestamp ge '{start.isoformat()}Z' and eventTimestamp le '{today.isoformat()}Z' and resourceUri eq '{resource_id}'"
+        
+        logs_iter = monitor_client.activity_logs.list(filter=filter_str)
+        
+        activities = []
+        for log in logs_iter:
+            # We specifically want failures, but we'll return all and let frontend highlight failures
+            status = log.status.localized_value if log.status else "Unknown"
+            activities.append({
+                "id": log.id,
+                "operationName": log.operation_name.localized_value if log.operation_name else "Unknown",
+                "status": status,
+                "eventTimestamp": log.event_timestamp.isoformat() if log.event_timestamp else None,
+                "level": log.level.value if log.level else "Info",
+                "description": log.description if log.description else status
+            })
+            if len(activities) >= 50: # Limit to 50
+                break
+                
+        return activities
+    except Exception as e:
+        print(f"Error fetching activity logs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/ai/analyze-failure")
+def analyze_failure(req: AnalyzeFailureRequest, current_user: dict = Depends(get_current_user)):
+    try:
+        import google.generativeai as genai
+        import os
+        
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            return {"analysis": "AI Copilot requires GEMINI_API_KEY to analyze failures."}
+            
+        genai.configure(api_key=gemini_api_key)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        
+        prompt = f"""You are an expert Cloud SRE and AI Copilot. 
+Analyze the following Azure failure log for resource {req.resource_id}.
+Provide a concise 'Root Cause' and a step-by-step 'Solution'. Use markdown formatting.
+
+Log message:
+{req.log_message}
+"""
+        response = model.generate_content(prompt)
+        return {"analysis": response.text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI analysis failed: {str(e)}")
+
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

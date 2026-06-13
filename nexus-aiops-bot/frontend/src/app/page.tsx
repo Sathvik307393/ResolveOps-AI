@@ -104,25 +104,30 @@ export default function CloudResourcesDashboard() {
     return (
       <div 
         key={r.id} 
-        onClick={() => handleToggleSelection(r.id)}
-        className={`glass-panel border-2 rounded-xl p-5 cursor-pointer transition-all relative overflow-hidden group ${
+        className={`glass-panel border-2 rounded-xl p-5 transition-all relative overflow-hidden group ${
           r.selected ? "border-indigo-500 bg-indigo-500/5" : "border-slate-800 hover:border-slate-700 hover:bg-white/5"
         }`}
       >
-        <div className="flex justify-between items-start mb-4">
+        <Link href={`/azure/resource/${encodeURIComponent(r.id)}`} className="absolute inset-0 z-0"></Link>
+        <div className="flex justify-between items-start mb-4 relative z-10">
           <div className={`p-2.5 rounded-lg ${bg} ${color}`}>
             <Icon size={20} />
           </div>
-          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-            r.selected ? "border-indigo-500 bg-indigo-500" : "border-slate-600"
-          }`}>
+          <button 
+            onClick={(e) => { e.preventDefault(); handleToggleSelection(r.id); }}
+            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center cursor-pointer transition-colors ${
+              r.selected ? "border-indigo-500 bg-indigo-500" : "border-slate-600 hover:border-indigo-400"
+            }`}
+          >
             {r.selected && <CheckCircle size={12} className="text-white" />}
-          </div>
+          </button>
         </div>
-        <h4 className="text-white font-medium text-sm truncate" title={r.name}>{r.name}</h4>
-        <div className="flex items-center space-x-2 mt-2">
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 uppercase tracking-wider">{r.type}</span>
-          <span className="text-[10px] text-slate-500 font-mono">{r.region}</span>
+        <div className="relative z-10 pointer-events-none">
+          <h4 className="text-white font-medium text-sm truncate" title={r.name}>{r.name}</h4>
+          <div className="flex items-center space-x-2 mt-2">
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 uppercase tracking-wider">{r.type}</span>
+            <span className="text-[10px] text-slate-500 font-mono">{r.region}</span>
+          </div>
         </div>
       </div>
     );
