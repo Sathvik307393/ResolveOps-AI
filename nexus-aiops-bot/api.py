@@ -1151,7 +1151,7 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
 
         if req.connected and service_key == "azure" and req.credentials:
             from azure.identity import ClientSecretCredential
-            from azure.mgmt.resource.subscriptions import SubscriptionClient
+            from azure.mgmt.subscription import SubscriptionClient
             import azure.core.exceptions
 
             client_id = req.credentials.get("client_id")
@@ -1308,7 +1308,7 @@ def get_cloud_resources(current_user: dict = Depends(get_current_user)):
             if client_id and client_secret and azure_tenant:
                 try:
                     from azure.identity import ClientSecretCredential
-                    from azure.mgmt.resource.subscriptions import SubscriptionClient
+                    from azure.mgmt.subscription import SubscriptionClient
                     from azure.mgmt.compute import ComputeManagementClient
                     
                     credential = ClientSecretCredential(
