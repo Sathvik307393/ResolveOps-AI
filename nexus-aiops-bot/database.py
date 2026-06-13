@@ -346,21 +346,27 @@ def get_chat_sessions(tenant_id: str) -> list:
                 
     sessions = {}
     for item in items:
-        sid = item.get('session_id', 'default')
-        if sid not in sessions:
-            sessions[sid] = {
-                "session_id": sid,
-                "timestamp": item['timestamp'],
-                "title": item['content'][:50] + "..." if item['role'] == 'user' else "New Chat",
-                "message_count": 1
-            }
-        else:
-            sessions[sid]["message_count"] += 1
-            if item['role'] == 'user' and sessions[sid]["title"] == "New Chat":
-                sessions[sid]["title"] = item['content'][:50] + "..."
-            if item['timestamp'] > sessions[sid]["timestamp"]:
-                sessions[sid]["timestamp"] = item['timestamp']
-                
+        try:
+            sid = item.get('session_id', 'default')
+            role = item.get('role', 'user')
+            content = item.get('content') or ''
+            timestamp = item.get('timestamp', '')
+            
+            if sid not in sessions:
+                sessions[sid] = {
+                    "session_id": sid,
+                    "timestamp": timestamp,
+                    "title": content[:50] + "..." if role == 'user' and content else "New Chat",
+                    "message_count": 1
+                }
+            else:
+                sessions[sid]["message_count"] += 1
+                if role == 'user' and sessions[sid]["title"] == "New Chat":
+                    sessions[sid]["title"] = content[:50] + "..." if content else "New Chat"
+                if timestamp > sessions[sid]["timestamp"]:
+                    sessions[sid]["timestamp"] = timestamp
+        except Exception as item_ex:
+            print(f"Error parsing chat session item: {item_ex}")                
     # Return as list sorted by latest timestamp descending
     return sorted(list(sessions.values()), key=lambda x: x['timestamp'], reverse=True)
 

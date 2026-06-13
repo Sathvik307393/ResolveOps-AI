@@ -98,19 +98,28 @@ export default function AzureHub() {
 
         {/* Top Section: Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="glass-panel border border-slate-800 rounded-xl p-5 flex flex-col justify-center">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Total Azure Resources</span>
-            <div className="text-3xl font-bold text-white">{resources.length}</div>
+          <div className="glass-panel border border-slate-800 rounded-xl p-6 flex flex-col justify-center relative overflow-hidden group hover:border-sky-500/30 transition-all cursor-default shadow-lg shadow-black/20">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-sky-500/20 duration-500"></div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+              <Cloud size={14} className="text-sky-500" /> Total Resources
+            </span>
+            <div className="text-4xl font-black text-white tracking-tight">{resources.length}</div>
           </div>
-          <div className="glass-panel border border-slate-800 rounded-xl p-5 flex flex-col justify-center">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Active Services</span>
-            <div className="text-3xl font-bold text-emerald-400">
+          <div className="glass-panel border border-slate-800 rounded-xl p-6 flex flex-col justify-center relative overflow-hidden group hover:border-emerald-500/30 transition-all cursor-default shadow-lg shadow-black/20">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-emerald-500/20 duration-500"></div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+              <CheckCircle size={14} className="text-emerald-500" /> Active Services
+            </span>
+            <div className="text-4xl font-black text-emerald-400 tracking-tight">
               {resources.filter(r => r.status.toLowerCase() === 'active' || r.status.toLowerCase() === 'running').length}
             </div>
           </div>
-          <div className="glass-panel border border-slate-800 rounded-xl p-5 flex flex-col justify-center">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Recent Anomalies/Alerts</span>
-            <div className="text-3xl font-bold text-rose-400">
+          <div className="glass-panel border border-slate-800 rounded-xl p-6 flex flex-col justify-center relative overflow-hidden group hover:border-rose-500/30 transition-all cursor-default shadow-lg shadow-black/20">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-rose-500/20 duration-500"></div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+              <AlertTriangle size={14} className="text-rose-500" /> Anomalies/Alerts
+            </span>
+            <div className="text-4xl font-black text-rose-400 tracking-tight">
               {logs.filter(l => l.level === 'ERROR' || l.level === 'WARNING').length}
             </div>
           </div>
@@ -132,35 +141,40 @@ export default function AzureHub() {
                 <p className="text-xs mt-1">Check your integration credentials.</p>
               </div>
             ) : (
-              <div className="divide-y divide-border bg-background/20 max-h-[500px] overflow-y-auto">
-                {resources.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((r, i) => (
-                  <div key={i} className="p-4 flex justify-between items-center hover:bg-white/[0.04] transition-colors group cursor-default">
-                    <div className="flex items-start gap-3 overflow-hidden pr-4">
-                      <div className="p-2 bg-slate-800 rounded-md text-sky-400 shrink-0 mt-0.5">
-                        {getResourceIcon(r.type)}
-                      </div>
-                      <div className="truncate">
-                        <h4 className="font-semibold text-sm text-slate-200 truncate" title={r.name}>{r.name}</h4>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 uppercase tracking-wider">{r.type}</span>
-                          <span className="text-[10px] text-slate-500 font-mono">{r.region}</span>
+              <div className="divide-y divide-slate-800/50 bg-background/20 max-h-[500px] overflow-y-auto">
+                {resources.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((r, i) => {
+                  // Format resource type nicely (e.g., "virtualnetworks" -> "Virtual Networks")
+                  const formattedType = r.type.replace(/([A-Z])/g, ' $1').trim().replace(/^./, str => str.toUpperCase()) || r.type;
+                  
+                  return (
+                    <div key={i} className="p-4 flex justify-between items-center hover:bg-white/[0.04] transition-colors group cursor-default">
+                      <div className="flex items-start gap-3 overflow-hidden pr-4">
+                        <div className="p-2.5 bg-slate-800/80 rounded-lg border border-slate-700/50 text-sky-400 shrink-0 mt-0.5 group-hover:bg-sky-500/10 group-hover:border-sky-500/20 group-hover:text-sky-300 transition-colors shadow-sm">
+                          {getResourceIcon(r.type)}
+                        </div>
+                        <div className="truncate flex flex-col justify-center">
+                          <h4 className="font-semibold text-sm text-slate-200 truncate group-hover:text-white transition-colors" title={r.name}>{r.name}</h4>
+                          <div className="flex items-center space-x-2 mt-1.5">
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-800/80 text-sky-200/70 border border-slate-700/50 uppercase tracking-widest">{formattedType}</span>
+                            <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1 before:content-['•'] before:text-slate-700 before:mr-1">{r.region}</span>
+                          </div>
                         </div>
                       </div>
+                      <div className="shrink-0">
+                        <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border flex items-center gap-1.5 shadow-sm capitalize tracking-wide ${
+                          r.status.toLowerCase() === 'active' || r.status.toLowerCase() === 'running'
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          : r.status.toLowerCase() === 'unknown'
+                          ? 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        }`}>
+                          {r.status.toLowerCase() === 'active' || r.status.toLowerCase() === 'running' ? <CheckCircle size={12} /> : <Activity size={12} />}
+                          {r.status}
+                        </span>
+                      </div>
                     </div>
-                    <div className="shrink-0">
-                      <span className={`px-2 py-1 rounded-md text-[10px] font-semibold border flex items-center gap-1.5 shadow-sm capitalize ${
-                        r.status.toLowerCase() === 'active' || r.status.toLowerCase() === 'running'
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        : r.status.toLowerCase() === 'unknown'
-                        ? 'bg-slate-500/10 text-slate-400 border-slate-500/20'
-                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                      }`}>
-                        {r.status.toLowerCase() === 'active' || r.status.toLowerCase() === 'running' ? <CheckCircle size={10} /> : <Activity size={10} />}
-                        {r.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             
@@ -199,9 +213,15 @@ export default function AzureHub() {
             </div>
             
             {logs.length === 0 ? (
-              <div className="p-12 text-center text-slate-500 flex flex-col items-center">
-                <Activity size={32} className="opacity-30 mb-3" />
-                <p className="text-sm">No recent telemetry logs.</p>
+              <div className="p-16 text-center flex flex-col items-center justify-center text-slate-500 bg-background/20 h-full">
+                <div className="relative">
+                  <Activity size={40} className="text-slate-700/50 mb-4 animate-pulse relative z-10" />
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-slate-800/30 rounded-full blur-xl"></div>
+                </div>
+                <p className="font-semibold text-slate-400">No recent telemetry logs</p>
+                <p className="text-xs text-slate-600 mt-2 max-w-[250px]">
+                  When active operations or anomalies occur on your Azure resources, logs will stream here automatically.
+                </p>
               </div>
             ) : (
               <div className="divide-y divide-border bg-background/20 overflow-y-auto">
