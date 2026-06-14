@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { fetchApi } from "@/lib/api";
-import { Activity, AlertCircle, ArrowLeft, Cpu, Hexagon, Info, Server, Sparkles, AlertTriangle } from "lucide-react";
+import { Activity, AlertCircle, ArrowLeft, Cpu, Hexagon, Info, Server, Sparkles, AlertTriangle, DollarSign, CheckCircle } from "lucide-react";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import KubernetesPanel from "@/components/KubernetesPanel";
 
@@ -202,6 +202,42 @@ export default function ResourceDetailsPage() {
           </div>
 
           <div className="space-y-6">
+            {details.cost_estimation && (
+              <div className="glass-panel p-6 rounded-xl border border-sky-500/30 bg-sky-500/5">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="text-emerald-400" size={20} />
+                    <h3 className="text-xl font-bold text-white">Estimated Running Price</h3>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase border flex items-center gap-1 shadow-sm capitalize tracking-wide bg-sky-500/10 text-sky-400 border-sky-500/20">
+                    {details.cost_estimation.status === "unavailable" ? "Unavailable" : "Estimated"}
+                  </span>
+                </div>
+                
+                {details.cost_estimation.status === "unavailable" ? (
+                  <p className="text-sm text-slate-400">{details.cost_estimation.cost_note}</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-4 mb-3">
+                      <div>
+                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Hourly</p>
+                        <p className="text-xl font-bold text-white font-mono">{details.cost_estimation.currency_symbol}{details.cost_estimation.estimated_hourly_running}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Daily</p>
+                        <p className="text-xl font-bold text-white font-mono">{details.cost_estimation.currency_symbol}{details.cost_estimation.estimated_daily_running}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Monthly</p>
+                        <p className="text-xl font-bold text-sky-400 font-mono">{details.cost_estimation.currency_symbol}{details.cost_estimation.estimated_monthly_running}</p>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-2 italic">{details.cost_estimation.cost_note}</p>
+                  </>
+                )}
+              </div>
+            )}
+
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <Server className="text-emerald-400" /> 
               {isResourceGroup ? "Child Resources" : "Related Information"}

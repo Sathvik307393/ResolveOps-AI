@@ -27,8 +27,9 @@ export default function GlobalDashboard() {
     Promise.all([
       fetchApi("/api/v1/integrations").catch(() => ({})),
       fetchApi("/api/v1/cloud/resources").catch(() => []),
-      fetchApi("/api/v1/github/deployments").catch(() => [])
-    ]).then(([integData, resData, depData]) => {
+      fetchApi("/api/v1/github/deployments").catch(() => []),
+      fetchApi("/api/v1/cloud/azure/cost").catch(() => ({}))
+    ]).then(([integData, resData, depData, costData]) => {
       setIntegrations(integData);
       
       const awsCount = Array.isArray(resData) ? resData.filter(r => r.provider === "AWS").length : 0;
@@ -42,7 +43,7 @@ export default function GlobalDashboard() {
         azure: azureCount,
         incidents: 0, // In reality, fetch from an incidents API
         risks: 0,     // In reality, fetch from a risks API
-        cost: "$0.00", // In reality, fetch from billing API
+        cost: costData && !costData.error ? costData : null,
         failures: failedPipelines,
         health: failedPipelines > 0 ? "92.0%" : "100%"
       });
@@ -117,7 +118,7 @@ export default function GlobalDashboard() {
           <StatCard title="Total Resources" value={totalResources} icon={<Server />} color="sky" />
           <StatCard title="Critical Risks" value={stats.risks} icon={<ShieldAlert />} color="amber" alert={stats.risks > 0} />
           <StatCard title="Failed Pipelines" value={stats.failures} icon={<AlertTriangle />} color="rose" alert={stats.failures > 0} />
-          <StatCard title="Est. Cloud Cost" value={stats.cost} icon={<DollarSign />} color="slate" />
+          <CostCard costData={stats.cost} />
         </div>
 
         {/* Platform Cards */}
@@ -312,6 +313,59 @@ function RecommendationRow({ type, title, desc }) {
       <div>
         <h4 className="text-sm font-bold text-slate-200 mb-1">{title}</h4>
         <p className="text-xs text-slate-400 leading-relaxed">{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+function CostCard({ costData }) {
+  if (!costData || !costData.subscription_cost) {
+    return (
+      <div className="glass-panel border border-slate-800/80 rounded-2xl p-5 flex flex-col justify-between">
+        <div className="flex justify-between items-start mb-4">
+          <div className="p-2 rounded-lg text-slate-400 bg-slate-500/10 border border-slate-500/20">
+            <DollarSign size={20} />
+          </div>
+        </div>
+        <div>
+          <p className="text-3xl font-black text-white mb-1 tracking-tight">$0.00</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Est. Cloud Cost</p>
+        </div>
+      </div>
+    );
+  }
+
+  const sub = costData.subscription_cost;
+  const isPermissionReq = sub.status === "permission_required";
+  
+  return (
+    <div className="glass-panel border border-sky-500/30 shadow-[0_0_15px_rgba(14,165,233,0.1)] rounded-2xl p-4 flex flex-col justify-between">
+      <div className="flex justify-between items-start mb-2">
+        <div className="p-2 rounded-lg text-sky-400 bg-sky-500/10 border border-sky-500/20">
+          <DollarSign size={20} />
+        </div>
+        {isPermissionReq ? (
+          <span className="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider flex items-center gap-1">
+            <ShieldAlert size={10} /> Permission Required
+          </span>
+        ) : (
+          <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider flex items-center gap-1">
+            <CheckCircle size={10} /> Actual
+          </span>
+        )}
+      </div>
+      <div>
+        {isPermissionReq ? (
+          <p className="text-sm font-bold text-slate-400 mb-1 leading-tight">Unavailable</p>
+        ) : (
+          <p className="text-2xl font-black text-white mb-1 tracking-tight">
+            {sub.currency_symbol}{sub.month_to_date_actual.toLocaleString(undefined, {minimumFractionDigits: 2})}
+          </p>
+        )}
+        <div className="flex justify-between items-end mt-1">
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Month-to-Date Cost</p>
+          <p className="text-[9px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded uppercase border border-sky-500/20">{sub.currency}</p>
+        </div>
       </div>
     </div>
   );

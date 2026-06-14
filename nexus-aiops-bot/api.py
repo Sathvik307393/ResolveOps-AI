@@ -1587,6 +1587,24 @@ def get_azure_resource_details(resource_id: str, current_user: dict = Depends(ge
                 "tags": r.tags
             }
             
+            try:
+                from azure_cost_service import get_estimated_resource_price
+                sku_name = None
+                if hasattr(r, 'sku') and r.sku and hasattr(r.sku, 'name'):
+                    sku_name = r.sku.name
+                
+                # Best effort basic cost estimation
+                if sku_name:
+                    estimated_cost = get_estimated_resource_price(r.type, sku_name, r.location, "INR")
+                    details["cost_estimation"] = estimated_cost
+                else:
+                    details["cost_estimation"] = {
+                        "status": "unavailable",
+                        "cost_note": "Estimated price unavailable without SKU. Actual usage cost may still appear through Cost Management."
+                    }
+            except Exception as e:
+                print(f"Cost estimation error: {e}")
+            
             # If it's an AKS cluster, fetch kubernetes internals
             if "Microsoft.ContainerService/managedClusters" in resource_id:
                 try:
@@ -1688,6 +1706,56 @@ Log message:
         return {"analysis": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI analysis failed: {str(e)}")
+
+@app.get("/api/v1/cloud/azure/cost")
+def get_azure_cost(current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_email = current_user.get("email")
+        from database import get_user_integrations
+        integrations = get_user_integrations(tenant_email)
+        azure_creds = integrations.get("azure", {}).get("credentials", {})
+        client_id = azure_creds.get("client_id")
+        client_secret = azure_creds.get("client_secret")
+        azure_tenant = azure_creds.get("tenant_id")
+        
+        if not (client_id and client_secret and azure_tenant):
+            return {"error": "Azure not connected"}
+
+        from azure.identity import ClientSecretCredential
+        from azure.mgmt.subscription import SubscriptionClient
+        from azure_cost_service import get_subscription_cost, get_resource_group_cost
+        
+        credential = ClientSecretCredential(
+            tenant_id=azure_tenant,
+            client_id=client_id,
+            client_secret=client_secret
+        )
+        
+        sub_client = SubscriptionClient(credential)
+        subs = list(sub_client.subscriptions.list())
+        
+        if not subs:
+            return {"error": "No subscriptions found"}
+            
+        sub_id = subs[0].subscription_id
+        
+        sub_cost = get_subscription_cost(credential, sub_id)
+        rg_costs = get_resource_group_cost(credential, sub_id)
+        
+        return {
+            "subscription_id": sub_id,
+            "subscription_cost": sub_cost,
+            "resource_group_costs": rg_costs
+        }
+    except Exception as e:
+        print(f"Cost Error: {e}")
+        return {"error": str(e)}
+
+@app.post("/api/v1/cloud/azure/cost/refresh")
+def refresh_azure_cost(current_user: dict = Depends(get_current_user)):
+    from azure_cost_service import clear_cost_cache
+    clear_cost_cache()
+    return {"message": "Cost cache cleared"}
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

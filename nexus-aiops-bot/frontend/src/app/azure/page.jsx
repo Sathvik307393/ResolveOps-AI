@@ -13,6 +13,7 @@ export default function AzureHub() {
   const [loading, setLoading] = useState(true);
   const [resources, setResources] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [costData, setCostData] = useState(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
@@ -26,8 +27,9 @@ export default function AzureHub() {
     setLoading(true);
     Promise.all([
       fetchApi("/api/v1/cloud/resources").catch(() => []),
-      fetchApi("/api/v1/cloud/logs").catch(() => [])
-    ]).then(([resData, logsData]) => {
+      fetchApi("/api/v1/cloud/logs").catch(() => []),
+      fetchApi("/api/v1/cloud/azure/cost").catch(() => ({}))
+    ]).then(([resData, logsData, cData]) => {
       const azureResources = Array.isArray(resData) ? resData.filter(r => r.provider === "Azure") : [];
       setResources(azureResources);
       
@@ -35,6 +37,7 @@ export default function AzureHub() {
       const azureLogs = Array.isArray(logsData) ? logsData.filter(l => azureResourceIds.has(l.resource_id)) : [];
       setLogs(azureLogs);
       
+      setCostData(cData && !cData.error ? cData : null);
       setLoading(false);
     });
   };
@@ -119,7 +122,12 @@ export default function AzureHub() {
                 <Network size={16} /> Architecture Map
               </button>
               <button
-                onClick={() => fetchData()}
+                onClick={() => {
+                  setLoading(true);
+                  fetchApi("/api/v1/cloud/azure/cost/refresh", { method: "POST" })
+                    .then(() => fetchData())
+                    .catch(() => fetchData());
+                }}
                 className="bg-white/5 hover:bg-white/10 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all border border-white/10 hover:shadow-[0_0_20px_rgba(255,255,255,0.05)] backdrop-blur-md"
               >
                 <RefreshCw size={16} /> Sync Resources
@@ -129,7 +137,33 @@ export default function AzureHub() {
         </div>
 
         {/* Top Section: Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="glass-panel border border-slate-800 rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden group hover:border-emerald-500/30 transition-all cursor-default">
+            {costData && costData.subscription_cost && costData.subscription_cost.status === "permission_required" ? (
+              <>
+                <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                  <ShieldAlert size={14} /> Permission Required
+                </span>
+                <div className="text-sm font-bold text-slate-400 tracking-tight leading-snug">Cost Management Reader missing</div>
+              </>
+            ) : (
+              <>
+                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-emerald-500/20 duration-500"></div>
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                  <DollarSign size={14} className="text-emerald-500" /> MTD Cloud Cost
+                </span>
+                <div className="text-3xl font-black text-white tracking-tight flex items-baseline gap-1">
+                  {costData && costData.subscription_cost ? (
+                    <>
+                      <span className="text-lg">{costData.subscription_cost.currency_symbol}</span>
+                      {costData.subscription_cost.month_to_date_actual.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded uppercase ml-2">{costData.subscription_cost.currency}</span>
+                    </>
+                  ) : "$0.00"}
+                </div>
+              </>
+            )}
+          </div>
           <div className="glass-panel border border-slate-800 rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden group hover:border-sky-500/30 transition-all cursor-default">
             <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-sky-500/20 duration-500"></div>
             <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
@@ -208,6 +242,13 @@ export default function AzureHub() {
                                 </div>
                               </div>
                               <div className="shrink-0 flex items-center gap-2">
+                                {r.type === 'Resource Group' && costData?.resource_group_costs?.[r.name.toLowerCase()] && (
+                                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded flex items-center gap-1 shadow-sm">
+                                    {costData.resource_group_costs[r.name.toLowerCase()].currency_symbol}
+                                    {costData.resource_group_costs[r.name.toLowerCase()].month_to_date_actual.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                    <span className="text-[8px] text-emerald-500/70">{costData.resource_group_costs[r.name.toLowerCase()].currency}</span>
+                                  </span>
+                                )}
                                 <span className={`px-2 py-0.5 rounded text-[9px] font-bold border flex items-center gap-1 shadow-sm capitalize tracking-wide ${
                                   rStatus === 'active' || rStatus === 'running'
                                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
