@@ -5,6 +5,8 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Cloud, Server, Database, AppWindow, Hexagon, Activity, CheckCircle, AlertTriangle, AlertCircle, RefreshCw, Network, Zap } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import Link from "next/link";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import MermaidDiagram from "@/components/MermaidDiagram";
 
 export default function AzureHub() {
   const router = useRouter();
@@ -14,6 +16,11 @@ export default function AzureHub() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
+  
+  // Architecture Diagram State
+  const [showArchModal, setShowArchModal] = useState(false);
+  const [archCode, setArchCode] = useState(null);
+  const [generatingArch, setGeneratingArch] = useState(false);
 
   const fetchData = () => {
     setLoading(true);
@@ -30,6 +37,25 @@ export default function AzureHub() {
       
       setLoading(false);
     });
+  };
+
+  const handleGenerateArchitecture = async () => {
+    setGeneratingArch(true);
+    setShowArchModal(true);
+    try {
+      const res = await fetchApi("/api/v1/cloud/architecture/generate", {
+        method: "POST",
+        body: JSON.stringify({ provider: "Azure" })
+      });
+      if (res.mermaid) {
+        setArchCode(res.mermaid);
+      }
+    } catch (e) {
+      console.error(e);
+      setArchCode("graph TD\n    Error[Failed to generate diagram]");
+    } finally {
+      setGeneratingArch(false);
+    }
   };
 
   useEffect(() => {
@@ -85,12 +111,20 @@ export default function AzureHub() {
                 Comprehensive telemetry, infrastructure state, relationship graphs, and operational logs for your entire Azure environment.
               </p>
             </div>
-            <button
-              onClick={() => fetchData()}
-              className="bg-white/5 hover:bg-white/10 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all border border-white/10 hover:shadow-[0_0_20px_rgba(255,255,255,0.05)] backdrop-blur-md"
-            >
-              <RefreshCw size={16} /> Sync Resources
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleGenerateArchitecture}
+                className="bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all border border-indigo-500/30 backdrop-blur-md"
+              >
+                <Network size={16} /> Architecture Map
+              </button>
+              <button
+                onClick={() => fetchData()}
+                className="bg-white/5 hover:bg-white/10 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all border border-white/10 hover:shadow-[0_0_20px_rgba(255,255,255,0.05)] backdrop-blur-md"
+              >
+                <RefreshCw size={16} /> Sync Resources
+              </button>
+            </div>
           </div>
         </div>
 
@@ -140,39 +174,58 @@ export default function AzureHub() {
               </div>
             ) : (
               <div className="divide-y divide-slate-800/50 bg-background/20 max-h-[500px] overflow-y-auto">
-                {resources.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((r, i) => {
-                  const formattedType = (r.type || '').replace(/([A-Z])/g, ' $1').trim().replace(/^./, str => str.toUpperCase()) || 'Resource';
-                  const rStatus = (r.status || 'unknown').toLowerCase();
+                {(() => {
+                  const grouped = resources.reduce((acc, r) => {
+                    const rg = r.resource_group || "Unknown Resource Group";
+                    if (!acc[rg]) acc[rg] = [];
+                    acc[rg].push(r);
+                    return acc;
+                  }, {});
                   
-                  return (
-                    <Link href={`/azure/resource/${encodeURIComponent(r.id)}`} key={i} className="p-4 flex justify-between items-center hover:bg-white/[0.04] transition-colors group cursor-pointer border-l-2 border-transparent hover:border-sky-500 block">
-                      <div className="flex items-start gap-3 overflow-hidden pr-4">
-                        <div className="p-2.5 bg-slate-800/80 rounded-lg border border-slate-700/50 text-sky-400 shrink-0 mt-0.5 group-hover:bg-sky-500/10 group-hover:border-sky-500/20 group-hover:text-sky-300 transition-colors shadow-sm">
-                          {getResourceIcon(r.type)}
-                        </div>
-                        <div className="truncate flex flex-col justify-center">
-                          <h4 className="font-semibold text-sm text-slate-200 truncate group-hover:text-white transition-colors" title={r.name}>{r.name}</h4>
-                          <div className="flex items-center space-x-2 mt-1.5">
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-800/80 text-sky-200/70 border border-slate-700/50 uppercase tracking-widest">{formattedType}</span>
-                            <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1 before:content-['•'] before:text-slate-700 before:mr-1">{r.region}</span>
-                          </div>
-                        </div>
+                  return Object.entries(grouped).map(([rgName, rgResources], idx) => (
+                    <div key={idx} className="p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Database size={16} className="text-indigo-400" />
+                        <h4 className="font-bold text-sm text-indigo-300 uppercase tracking-wider">{rgName}</h4>
                       </div>
-                      <div className="shrink-0 flex items-center gap-3">
-                        <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border flex items-center gap-1.5 shadow-sm capitalize tracking-wide ${
-                          rStatus === 'active' || rStatus === 'running'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : rStatus === 'unknown'
-                          ? 'bg-slate-500/10 text-slate-400 border-slate-500/20'
-                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                        }`}>
-                          {rStatus === 'active' || rStatus === 'running' ? <CheckCircle size={12} /> : <Activity size={12} />}
-                          {r.status}
-                        </span>
+                      <div className="pl-2 border-l-2 border-slate-800/80 space-y-2">
+                        {rgResources.map((r, i) => {
+                          const formattedType = (r.type || '').replace(/([A-Z])/g, ' $1').trim().replace(/^./, str => str.toUpperCase()) || 'Resource';
+                          const rStatus = (r.status || 'unknown').toLowerCase();
+                          
+                          return (
+                            <Link href={`/azure/resource/${encodeURIComponent(r.id)}`} key={i} className="p-3 bg-white/[0.02] rounded-xl flex justify-between items-center hover:bg-white/[0.05] transition-colors group cursor-pointer border border-transparent hover:border-sky-500/30 block">
+                              <div className="flex items-start gap-3 overflow-hidden pr-4">
+                                <div className="p-2 bg-slate-800/80 rounded border border-slate-700/50 text-sky-400 shrink-0 mt-0.5 group-hover:bg-sky-500/10 group-hover:border-sky-500/20 group-hover:text-sky-300 transition-colors shadow-sm">
+                                  {getResourceIcon(r.type)}
+                                </div>
+                                <div className="truncate flex flex-col justify-center">
+                                  <h4 className="font-semibold text-xs text-slate-200 truncate group-hover:text-white transition-colors" title={r.name}>{r.name}</h4>
+                                  <div className="flex items-center space-x-2 mt-1">
+                                    <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-slate-800/80 text-sky-200/70 border border-slate-700/50 uppercase tracking-widest">{formattedType}</span>
+                                    <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1 before:content-['•'] before:text-slate-700 before:mr-1">{r.region}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="shrink-0 flex items-center gap-2">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold border flex items-center gap-1 shadow-sm capitalize tracking-wide ${
+                                  rStatus === 'active' || rStatus === 'running'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                  : rStatus === 'unknown'
+                                  ? 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                                  : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                }`}>
+                                  {rStatus === 'active' || rStatus === 'running' ? <CheckCircle size={10} /> : <Activity size={10} />}
+                                  {r.status}
+                                </span>
+                              </div>
+                            </Link>
+                          );
+                        })}
                       </div>
-                    </Link>
-                  );
-                })}
+                    </div>
+                  ));
+                })()}
               </div>
             )}
             
@@ -252,6 +305,29 @@ export default function AzureHub() {
 
         </div>
       </div>
+      
+      {/* Architecture Diagram Modal */}
+      <Dialog open={showArchModal} onOpenChange={setShowArchModal}>
+        <DialogContent className="sm:max-w-4xl bg-[#0B0C10] border-slate-800 text-slate-200">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sky-400">
+              <Network size={20} /> Auto-Generated Architecture Diagram
+            </DialogTitle>
+          </DialogHeader>
+          <div className="h-[60vh] w-full">
+            {generatingArch ? (
+              <div className="h-full flex flex-col items-center justify-center space-y-4">
+                <Activity className="animate-spin text-sky-500 w-10 h-10" />
+                <p className="text-slate-400 font-mono text-sm animate-pulse">Mapping relationships...</p>
+              </div>
+            ) : archCode ? (
+              <div className="h-full rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10">
+                <MermaidDiagram chart={archCode} />
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
