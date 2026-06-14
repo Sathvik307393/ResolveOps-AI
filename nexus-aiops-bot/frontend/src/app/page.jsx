@@ -74,9 +74,9 @@ export default function GlobalDashboard() {
     );
   }
 
-  const isAwsConnected = integrations.aws?.connected;
-  const isAzureConnected = integrations.azure?.connected;
-  const isGithubConnected = integrations.github?.connected;
+  const isAwsConnected = !!integrations.aws;
+  const isAzureConnected = !!integrations.azure;
+  const isGithubConnected = !!integrations.github;
   const totalConnected = [isAwsConnected, isAzureConnected, isGithubConnected].filter(Boolean).length;
   const totalResources = stats.aws + stats.azure;
 
