@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway-service
+
+  api-gateway-service:
+    build:
+      context: ./services/api-gateway-service
+    ports:
+      - "8000:8000"
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+    ports:
+      - "8001:8000"
+
+  github-intelligence-service:
+    build:
+      context: ./services/github-intelligence-service
+    ports:
+      - "8002:8000"
+
+  azure-intelligence-service:
+    build:
+      context: ./services/azure-intelligence-service
+    ports:
+      - "8003:8000"
+
+  aws-intelligence-service:
+    build:
+      context: ./services/aws-intelligence-service
+    ports:
+      - "8004:8000"
+
+  ai-rca-service:
+    build:
+      context: ./services/ai-rca-service
+    ports:
+      - "8005:8000"
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+    ports:
+      - "8006:8000"
+
+  diagram-report-service:
+    build:
+      context: ./services/diagram-report-service
+    ports:
+      - "8007:8000"
+
+  cost-insights-service:
+    build:
+      context: ./services/cost-insights-service
+    ports:
+      - "8008:8000"
