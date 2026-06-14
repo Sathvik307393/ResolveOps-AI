@@ -6,45 +6,15 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Server, Box, Terminal, Activity, Layers, Cpu, Database } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
-interface NodeData {
-  name: string;
-  status: string;
-  cpu_util: string;
-  mem_util: string;
-}
 
-interface PodData {
-  name: string;
-  namespace: string;
-  status: string;
-  restarts: number;
-  cpu: string;
-  mem: string;
-}
-
-interface DeploymentData {
-  name: string;
-  desired: number;
-  ready: number;
-  updated: number;
-}
-
-interface K8sClusterData {
-  cluster_id: string;
-  provider: string;
-  region: string;
-  nodes: NodeData[];
-  pods: PodData[];
-  deployments: DeploymentData[];
-}
 
 export default function KubernetesExplorer() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"nodes" | "pods" | "deployments">("pods");
-  const [clusterData, setClusterData] = useState<K8sClusterData | null>(null);
-  const [selectedPod, setSelectedPod] = useState<PodData | null>(null);
-  const [podLogs, setPodLogs] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState("pods");
+  const [clusterData, setClusterData] = useState(null);
+  const [selectedPod, setSelectedPod] = useState(null);
+  const [podLogs, setPodLogs] = useState([]);
 
   useEffect(() => {
     const token = localStorage.getItem("jwt_token");
@@ -65,7 +35,7 @@ export default function KubernetesExplorer() {
       .catch(() => setLoading(false));
   }, [router]);
 
-  const generateMockLogs = (podName: string) => {
+  const generateMockLogs = (podName) => {
     const messages = [
       `INFO [2026-06-06 17:10:01] Starting container listener for ${podName}...`,
       `INFO [2026-06-06 17:10:02] Loading configuration settings.`,
@@ -77,7 +47,7 @@ export default function KubernetesExplorer() {
     setPodLogs(messages);
   };
 
-  const handleSelectPod = (pod: PodData) => {
+  const handleViewLogs = async (pod) => {
     setSelectedPod(pod);
     generateMockLogs(pod.name);
   };
@@ -108,7 +78,7 @@ export default function KubernetesExplorer() {
 
         {/* Tab Selection Row */}
         <div className="flex space-x-2 border-b border-slate-800 pb-px">
-          {(["nodes", "pods", "deployments"] as const).map((tab) => (
+          {(["nodes", "pods", "deployments"]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}

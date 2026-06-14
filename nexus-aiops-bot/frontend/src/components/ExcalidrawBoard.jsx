@@ -4,12 +4,9 @@ import React from "react";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 
-interface ExcalidrawBoardProps {
-  elements: any[];
-  appState?: any;
-}
 
-export default function ExcalidrawBoard({ elements, appState }: ExcalidrawBoardProps) {
+
+export default function ExcalidrawBoard({ elements, appState }) {
   // Excalidraw wrapper component with styling for a dark theme dashboard integration
   return (
     <div className="w-full h-[400px] border border-white/10 rounded-xl overflow-hidden bg-[#020617] my-3 relative">

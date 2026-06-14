@@ -7,39 +7,22 @@ import { fetchApi } from "@/lib/api";
 import { Activity, AlertCircle, ArrowLeft, Cpu, Hexagon, Info, Server, Sparkles, AlertTriangle } from "lucide-react";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 
-interface ResourceDetails {
-  id: string;
-  name: string;
-  type: string;
-  location: string;
-  tags?: Record<string, string>;
-  tenant_id?: string;
-  user_email?: string;
-}
 
-interface ActivityLog {
-  id: string;
-  operationName: string;
-  status: string;
-  eventTimestamp: string;
-  level: string;
-  description: string;
-}
 
 export default function ResourceDetailsPage() {
   const params = useParams();
   const router = useRouter();
   
-  const rawId = params.id as string;
+  const rawId = params.id;
   const resourceId = decodeURIComponent(rawId);
   
   const [loading, setLoading] = useState(true);
-  const [details, setDetails] = useState<ResourceDetails | null>(null);
-  const [children, setChildren] = useState<any[]>([]);
-  const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [details, setDetails] = useState(null);
+  const [children, setChildren] = useState([]);
+  const [activities, setActivities] = useState([]);
   
-  const [analyzingLogId, setAnalyzingLogId] = useState<string | null>(null);
-  const [aiAnalysis, setAiAnalysis] = useState<Record<string, string>>({});
+  const [analyzingLogId, setAnalyzingLogId] = useState(null);
+  const [aiAnalysis, setAiAnalysis] = useState({});
 
   useEffect(() => {
     if (!resourceId) return;
@@ -61,7 +44,7 @@ export default function ResourceDetailsPage() {
     });
   }, [resourceId]);
 
-  const handleAnalyzeFailure = async (log: ActivityLog) => {
+  const handleAnalyzeFailure = async (log) => {
     if (aiAnalysis[log.id]) return; // Already analyzed
     
     setAnalyzingLogId(log.id);

@@ -12,7 +12,7 @@ import { fetchApi } from "@/lib/api";
 import { Mail, ShieldCheck, ArrowRight, Cpu, Eye, EyeOff } from "lucide-react";
 
 // ─── Registration: Two-step OTP flow ─────────────────────────────────────────
-type RegStep = "details" | "otp";
+// ─── Registration: Two-step OTP flow ─────────────────────────────────────────
 
 function RegisterForm() {
   const router = useRouter();
@@ -26,7 +26,7 @@ function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [showRegPassword, setShowRegPassword] = useState(false);
 
-  const handleRequestOtp = async (e: React.FormEvent) => {
+  const handleRequestOtp = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -37,14 +37,14 @@ function RegisterForm() {
       });
       setSuccess(`OTP sent to ${regEmail}. Check your inbox!`);
       setStep("otp");
-    } catch (err: any) {
+    } catch (err) {
       setError(err.message || "Failed to send OTP.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -67,7 +67,7 @@ function RegisterForm() {
         localStorage.setItem("jwt_token", loginData.token);
         router.push("/");
       }
-    } catch (err: any) {
+    } catch (err) {
       setError(err.message || "Registration failed.");
     } finally {
       setLoading(false);
@@ -199,7 +199,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -212,7 +212,7 @@ export default function LoginPage() {
         localStorage.setItem("jwt_token", data.token);
         router.push("/");
       }
-    } catch (err: any) {
+    } catch (err) {
       setError(err.message || "Invalid credentials.");
     } finally {
       setLoading(false);

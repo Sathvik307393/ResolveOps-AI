@@ -9,7 +9,7 @@ const ExcalidrawBoard = dynamic(
   { ssr: false }
 );
 
-function findExcalidrawCode(children: any): { codeText: string } | null {
+function findExcalidrawCode(children) {
   if (!children) return null;
   if (Array.isArray(children)) {
     for (const child of children) {
@@ -34,9 +34,9 @@ function findExcalidrawCode(children: any): { codeText: string } | null {
   return null;
 }
 
-function CodeBlock({ children, ...props }: any) {
+function CodeBlock({ children, ...props }) {
   const [copied, setCopied] = useState(false);
-  const codeRef = useRef<HTMLPreElement>(null);
+  const codeRef = useRef(null);
 
   const excalidraw = useMemo(() => {
     return findExcalidrawCode(children);
@@ -90,7 +90,7 @@ function CodeBlock({ children, ...props }: any) {
   );
 }
 
-export default function MarkdownRenderer({ content }: { content: string }) {
+export default function MarkdownRenderer({ content }) {
   return (
     <ReactMarkdown
       components={{

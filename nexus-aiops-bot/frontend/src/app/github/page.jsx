@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
-import { GitBranch, User, Clock, CheckCircle, XCircle, AlertCircle, Activity, RefreshCw, Bot, Terminal, Play, Server, Github } from "lucide-react";
+import { GitBranch, User, Clock, CheckCircle, XCircle, AlertCircle, Activity, RefreshCw, Bot, Terminal, Play, Server } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
 export default function GitHubDeployments() {
@@ -130,7 +130,7 @@ export default function GitHubDeployments() {
           <div className="relative z-10 flex justify-between items-end">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-500/10 text-purple-400 text-xs font-bold uppercase tracking-wider rounded-full border border-purple-500/20 mb-4">
-                <Github size={12} className="text-purple-400" /> Pipeline Intelligence
+                <GitBranch size={12} className="text-purple-400" /> Pipeline Intelligence
               </div>
               <h2 className="text-3xl font-bold tracking-wide text-white mb-2">
                 GitHub Sync Hub

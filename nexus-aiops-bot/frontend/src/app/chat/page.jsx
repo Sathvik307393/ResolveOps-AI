@@ -14,7 +14,7 @@ const ExcalidrawBoard = dynamic(
 );
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function getGreeting(): string {
+function getGreeting() {
   const hour = new Date().getHours();
   if (hour >= 5 && hour < 12) return "Good Morning";
   if (hour >= 12 && hour < 18) return "Good Afternoon";
@@ -28,7 +28,7 @@ function getGreetingIcon() {
   return Moon;
 }
 
-function decodeJwtPayload(token: string): Record<string, any> {
+function decodeJwtPayload(token) {
   try {
     const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
     return JSON.parse(atob(base64));
@@ -38,7 +38,7 @@ function decodeJwtPayload(token: string): Record<string, any> {
 }
 
 // Recursive helper to safely search through MDX/Markdown children trees to locate excalidraw JSON text.
-function findExcalidrawCode(children: any): { codeText: string } | null {
+function findExcalidrawCode(children) {
   if (!children) return null;
   if (Array.isArray(children)) {
     for (const child of children) {
@@ -63,9 +63,9 @@ function findExcalidrawCode(children: any): { codeText: string } | null {
   return null;
 }
 
-function CodeBlock({ children, ...props }: any) {
+function CodeBlock({ children, ...props }) {
   const [copied, setCopied] = useState(false);
-  const codeRef = useRef<HTMLPreElement>(null);
+  const codeRef = useRef(null);
 
   const excalidraw = useMemo(() => {
     return findExcalidrawCode(children);
@@ -76,7 +76,7 @@ function CodeBlock({ children, ...props }: any) {
       // Clean up common LLM JSON syntax errors (like trailing commas) before parsing
       let cleanedJsonText = excalidraw.codeText.trim();
       cleanedJsonText = cleanedJsonText.replace(/,\s*([\]}])/g, '$1');
-      
+
       const parsedElements = JSON.parse(cleanedJsonText);
       return <ExcalidrawBoard elements={parsedElements.elements || []} />;
     } catch (e) {
@@ -126,33 +126,33 @@ export default function AICopilot() {
   const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [messages, setMessages] = useState([]);
+  const [sessionId, setSessionId] = useState(null);
   const [sending, setSending] = useState(false);
   const [fullName, setFullName] = useState("");
-  const [imageFile, setImageFile] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  
+  const [imageFile, setImageFile] = useState(null);
+  const messagesEndRef = useRef(null);
+
   // Voice Recording State
   const [isRecording, setIsRecording] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
   const [voiceSending, setVoiceSending] = useState(false);
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.type.startsWith("image/")) {
         const reader = new FileReader();
         reader.onloadend = () => {
-          setImageFile(reader.result as string);
+          setImageFile(reader.result);
         };
         reader.readAsDataURL(file);
       } else {
         // Universal File Handler (txt, json, log, etc.)
         const reader = new FileReader();
         reader.onloadend = () => {
-          const text = reader.result as string;
+          const text = reader.result;
           // Append contents to chat input automatically
           setInput(prev => prev + `\n\n--- FILE: ${file.name} ---\n${text}\n---------------------\n`);
         };
@@ -209,14 +209,14 @@ export default function AICopilot() {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         // Close tracks
         stream.getTracks().forEach(track => track.stop());
-        
+
         // Convert Blob to Base64
         const reader = new FileReader();
         reader.readAsDataURL(audioBlob);
         reader.onloadend = async () => {
-          const base64data = reader.result as string;
+          const base64data = reader.result;
           const pureBase64 = base64data.split(',')[1];
-          
+
           setVoiceSending(true);
           try {
             const res = await fetchApi("/api/chat/voice", {
@@ -272,9 +272,9 @@ export default function AICopilot() {
 
     // Fetch message history from API for the specific session
     fetchApi(`/api/chat/history?session_id=${sid}`)
-      .then((history: any) => {
+      .then((history) => {
         if (Array.isArray(history) && history.length > 0) {
-          const mapped = history.map((msg: any) => {
+          const mapped = history.map((msg) => {
             let content = msg.content || "";
             if (msg.role === "user" && msg.image_base64) {
               content = `🖼️ [Uploaded Architecture Diagram] ${content}`;
@@ -321,9 +321,9 @@ export default function AICopilot() {
 
     const userMsg = input.trim();
     const payloadQuery = userMsg || "Analyze this uploaded infrastructure architecture diagram.";
-    
+
     // Include a visual indicator in user's chat message if they uploaded an image
-    const userDisplayContent = imageFile 
+    const userDisplayContent = imageFile
       ? `🖼️ [Uploaded Architecture Diagram] ${userMsg}`
       : userMsg;
 
@@ -335,9 +335,9 @@ export default function AICopilot() {
     setImageFile(null);
 
     try {
-      const payload: any = { 
-        message: payloadQuery, 
-        image_base64: currentImage 
+      const payload = {
+        message: payloadQuery,
+        image_base64: currentImage
       };
       if (sessionId) {
         payload.session_id = sessionId;
@@ -348,15 +348,15 @@ export default function AICopilot() {
         body: JSON.stringify(payload),
       });
       setMessages((prev) => [...prev, { role: "assistant", content: data.answer }]);
-      
+
       if (data.session_id && !sessionId) {
         setSessionId(data.session_id);
         router.replace(`/chat?session_id=${data.session_id}`);
       }
-      
+
       // Dispatch custom event to notify sidebar of updates
       window.dispatchEvent(new Event("chat-updated"));
-    } catch (err: any) {
+    } catch (err) {
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: `⚠️ **Error:** ${err.message}` },
@@ -391,13 +391,13 @@ export default function AICopilot() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button 
+            <button
               onClick={startNewChat}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-md text-xs font-semibold transition-colors border border-indigo-500/20"
             >
               <Plus size={14} /> New Chat
             </button>
-            <button 
+            <button
               onClick={handleClearHistory}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-md text-xs font-semibold transition-colors border border-rose-500/20"
             >
@@ -415,18 +415,16 @@ export default function AICopilot() {
               <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[80%] flex space-x-4 ${msg.role === "user" ? "flex-row-reverse space-x-reverse" : ""}`}>
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                      msg.role === "user" ? "bg-indigo-600" : "bg-emerald-600"
-                    }`}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === "user" ? "bg-indigo-600" : "bg-emerald-600"
+                      }`}
                   >
                     {msg.role === "user" ? <User size={16} /> : <Bot size={16} />}
                   </div>
                   <div
-                    className={`p-4 rounded-2xl ${
-                      msg.role === "user"
+                    className={`p-4 rounded-2xl ${msg.role === "user"
                         ? "bg-indigo-600/20 border border-indigo-500/30 text-indigo-100 whitespace-pre-wrap"
                         : "bg-black/40 border border-white/10 text-slate-300 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
-                    }`}
+                      }`}
                   >
                     {msg.role === "user" ? (
                       msg.content
@@ -478,7 +476,7 @@ export default function AICopilot() {
             {imageFile && (
               <div className="mb-3 relative w-16 h-16 border border-indigo-500/50 rounded-lg overflow-hidden group bg-slate-900 flex items-center justify-center">
                 <img src={imageFile} alt="Upload preview" className="object-cover w-full h-full" />
-                <button 
+                <button
                   onClick={() => setImageFile(null)}
                   className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-500 hover:text-rose-400 text-xs font-bold transition-opacity cursor-pointer border-none font-sans"
                 >
@@ -489,15 +487,15 @@ export default function AICopilot() {
             <div className="relative flex items-center bg-[#0a0a0f] border border-slate-800 rounded-xl px-4 py-2 focus-within:border-indigo-500/50 transition-all">
               <label className="mr-3 cursor-pointer text-slate-400 hover:text-white transition-colors" title="Upload Image or File (txt, log, json)">
                 <Paperclip size={18} />
-                <input 
-                  type="file" 
-                  accept="image/*,.txt,.log,.json,.csv,.md" 
-                  className="hidden" 
+                <input
+                  type="file"
+                  accept="image/*,.txt,.log,.json,.csv,.md"
+                  className="hidden"
                   onChange={handleImageChange}
                 />
               </label>
-              
-              <button 
+
+              <button
                 onClick={toggleRecording}
                 className={`mr-3 transition-colors ${isRecording ? 'text-rose-500 animate-pulse' : 'text-slate-400 hover:text-white'} ${voiceSending ? 'opacity-50 cursor-not-allowed' : ''}`}
                 title="Voice Record"

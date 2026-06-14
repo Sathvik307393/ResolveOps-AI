@@ -1,7 +1,7 @@
 // src/lib/api.ts
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
-export async function fetchApi(endpoint: string, options: RequestInit = {}) {
+export async function fetchApi(endpoint, options = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('jwt_token') : null;
   
   let path = endpoint;
