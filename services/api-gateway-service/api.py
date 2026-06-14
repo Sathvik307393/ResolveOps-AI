@@ -311,6 +311,33 @@ def delete_chat_history_endpoint(session_id: Optional[str] = None, current_user:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class SessionRenameRequest(BaseModel):
+    title: str
+
+@app.patch("/api/v1/chat/sessions/{session_id}")
+def rename_chat_session(session_id: str, req: SessionRenameRequest, current_user: dict = Depends(get_current_user)):
+    """Rename a chat session title for the authenticated user."""
+    try:
+        tenant_id = current_user.get("user_id")
+        table = get_chat_history_table()
+        # Update all messages in the session with the new title stored as metadata
+        # We store the title in a special "session_meta" record to avoid scanning all messages
+        timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+        table.put_item(Item={
+            "tenant_id": tenant_id,
+            "timestamp": f"META#{session_id}",
+            "session_id": session_id,
+            "role": "_meta",
+            "content": "",
+            "title": req.title[:100],
+            "updated_at": timestamp
+        })
+        return {"status": "success", "session_id": session_id, "title": req.title}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 class VoiceRequest(BaseModel):
     audio_base64: str
 

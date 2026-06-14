@@ -326,7 +326,7 @@ def store_chat_message(tenant_id: str, session_id: str, role: str, content: str,
         return False
 
 def get_chat_sessions(tenant_id: str) -> list:
-    """Retrieves all unique sessions for a tenant, returning the latest timestamp and title."""
+    """Retrieves all unique sessions for a tenant. Respects custom titles stored in _meta records."""
     try:
         table = get_chat_history_table()
         response = table.query(
@@ -343,32 +343,48 @@ def get_chat_sessions(tenant_id: str) -> list:
                 items = [msg for msg in history if msg.get('tenant_id') == tenant_id]
             except:
                 pass
-                
+
     sessions = {}
+    meta_titles = {}  # session_id -> custom title from rename operation
+
     for item in items:
         try:
             sid = item.get('session_id', 'default')
             role = item.get('role', 'user')
             content = item.get('content') or ''
             timestamp = item.get('timestamp', '')
-            
+
+            # Pick up custom titles stored as _meta records
+            if role == '_meta' and item.get('title'):
+                meta_titles[sid] = item.get('title')
+                continue
+
             if sid not in sessions:
                 sessions[sid] = {
                     "session_id": sid,
                     "timestamp": timestamp,
-                    "title": content[:50] + "..." if role == 'user' and content else "New Chat",
+                    "title": content[:60] + "..." if role == 'user' and content else "New Chat",
+                    "last_message": content[:80] if role == 'user' and content else "",
                     "message_count": 1
                 }
             else:
                 sessions[sid]["message_count"] += 1
-                if role == 'user' and sessions[sid]["title"] == "New Chat":
-                    sessions[sid]["title"] = content[:50] + "..." if content else "New Chat"
                 if timestamp > sessions[sid]["timestamp"]:
                     sessions[sid]["timestamp"] = timestamp
+                    if role == 'user' and content:
+                        sessions[sid]["last_message"] = content[:80]
+                if role == 'user' and sessions[sid]["title"] == "New Chat" and content:
+                    sessions[sid]["title"] = content[:60] + "..."
         except Exception as item_ex:
-            print(f"Error parsing chat session item: {item_ex}")                
-    # Return as list sorted by latest timestamp descending
+            print(f"Error parsing chat session item: {item_ex}")
+
+    # Apply custom titles from rename operations
+    for sid, title in meta_titles.items():
+        if sid in sessions:
+            sessions[sid]["title"] = title
+
     return sorted(list(sessions.values()), key=lambda x: x['timestamp'], reverse=True)
+
 
 def get_chat_history(tenant_id: str, session_id: str = None, limit: int = 50) -> list:
     """Retrieves the message logs for a given tenant and session."""
