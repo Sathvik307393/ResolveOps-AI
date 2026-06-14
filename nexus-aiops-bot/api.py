@@ -1462,7 +1462,23 @@ def get_azure_resource_details(resource_id: str, current_user: dict = Depends(ge
                     "location": r.location
                 })
         else:
-            r = resource_client.resources.get_by_id(resource_id, api_version="2021-04-01") # Using a default generic api version
+            # Dynamically determine the correct API version for the resource
+            try:
+                parts_after_providers = resource_id.split('/providers/')[1].split('/')
+                provider_namespace = parts_after_providers[0]
+                resource_type = parts_after_providers[1]
+                
+                provider = resource_client.providers.get(provider_namespace)
+                api_version = "2021-04-01" # Default fallback
+                if provider and provider.resource_types:
+                    for rt in provider.resource_types:
+                        if rt.resource_type.lower() == resource_type.lower() and rt.api_versions:
+                            api_version = rt.api_versions[0]
+                            break
+            except IndexError:
+                api_version = "2021-04-01"
+
+            r = resource_client.resources.get_by_id(resource_id, api_version=api_version)
             details = {
                 "id": r.id,
                 "name": r.name,
@@ -1480,8 +1496,8 @@ def get_azure_resource_details(resource_id: str, current_user: dict = Depends(ge
 def get_azure_resource_activity(resource_id: str, current_user: dict = Depends(get_current_user)):
     try:
         tenant_email = current_user.get("email")
-        from database import get_integration_profile
-        integrations = get_integration_profile(tenant_email)
+        from database import get_user_integrations
+        integrations = get_user_integrations(tenant_email)
         azure_creds = integrations.get("azure", {}).get("credentials", {})
         client_id = azure_creds.get("client_id")
         client_secret = azure_creds.get("client_secret")
