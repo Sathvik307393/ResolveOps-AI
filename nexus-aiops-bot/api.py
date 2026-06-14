@@ -1675,7 +1675,7 @@ def analyze_failure(req: AnalyzeFailureRequest, current_user: dict = Depends(get
             return {"analysis": "AI Copilot requires GEMINI_API_KEY to analyze failures."}
             
         genai.configure(api_key=gemini_api_key)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-1.5-flash")
         
         prompt = f"""You are an expert Cloud SRE and AI Copilot. 
 Analyze the following Azure failure log for resource {req.resource_id}.
