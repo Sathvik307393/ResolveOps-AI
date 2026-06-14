@@ -6,27 +6,27 @@ export const SECRET_REDACTION_REGEXES = [
   /(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36}/g, // GitHub PATs
   /eyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*/g, // JWTs
   /(?:^|[^A-Za-z0-9+])(AKIA[0-9A-Z]{16})(?:[^A-Za-z0-9+]|$)/g, // AWS Access Keys
-  /(?i)(?:secret|password|token|key|pwd)(?:[ \t]*[:=][ \t]*)(['"]?)([^'"\r\n]+)\1/g, // generic key/values
+  /(?:secret|password|token|key|pwd)(?:[ \t]*[:=][ \t]*)(['"]?)([^'"\r\n]+)\1/gi, // generic key/values
   /([a-zA-Z0-9+/=]{40,})/g // Long base64 strings (often secrets/certs)
 ];
 
 export function redactSecrets(text) {
   if (!text) return text;
   let redacted = String(text);
-  
+
   // Apply specific known regexes
   SECRET_REDACTION_REGEXES.forEach(regex => {
-    redacted = redacted.replace(regex, (match, ...groups) => {
+    redacted = redacted.replace(regex, (match) => {
       // If regex has groups, we might only want to replace the value part, 
       // but for simplicity, we'll replace the whole match if it's a token, 
       // or just the captured group if it's a key=value regex.
       if (match.toLowerCase().includes('secret') || match.toLowerCase().includes('password')) {
-        return match.split('=')[0] + '=[REDACTED_SECRET]';
+        return match.split(/[:=]/)[0] + '=[REDACTED_SECRET]';
       }
       return '[REDACTED_SECRET]';
     });
   });
-  
+
   return redacted;
 }
 
