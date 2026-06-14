@@ -1587,6 +1587,23 @@ def get_azure_resource_details(resource_id: str, current_user: dict = Depends(ge
                 "tags": r.tags
             }
             
+            # If it's an AKS cluster, fetch kubernetes internals
+            if "Microsoft.ContainerService/managedClusters" in resource_id:
+                try:
+                    from kubernetes_helper import fetch_aks_kubeconfig, get_kubernetes_workloads
+                    rg_name = parts[4]
+                    cluster_name = parts[8]
+                    kubeconfig_str = fetch_aks_kubeconfig(credential, sub_id, rg_name, cluster_name)
+                    details["kubernetes"] = get_kubernetes_workloads(kubeconfig_str)
+                except Exception as k8s_err:
+                    details["kubernetes"] = {
+                        "enabled": False,
+                        "connection_status": "failed",
+                        "reason": "permission_missing" if "permission" in str(k8s_err).lower() else "unknown",
+                        "message": str(k8s_err),
+                        "recommended_action": "Ensure Service Principal has AKS Cluster User role."
+                    }
+            
         return {"details": details, "children": children, "tenant_id": azure_tenant, "user_email": tenant_email}
     except Exception as e:
         print(f"Error fetching resource details: {e}")

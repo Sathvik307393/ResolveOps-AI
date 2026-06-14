@@ -6,8 +6,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { fetchApi } from "@/lib/api";
 import { Activity, AlertCircle, ArrowLeft, Cpu, Hexagon, Info, Server, Sparkles, AlertTriangle } from "lucide-react";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
-
-
+import KubernetesPanel from "@/components/KubernetesPanel";
 
 export default function ResourceDetailsPage() {
   const params = useParams();
@@ -232,6 +231,17 @@ export default function ResourceDetailsPage() {
                   })}
                 </div>
               )
+            ) : details.kubernetes ? (
+              <div className="lg:col-span-1">
+                 <div className="glass-panel p-6 rounded-xl border border-slate-800 mb-6">
+                    <div className="flex items-start gap-3 mb-4">
+                      <Cpu className="text-emerald-400 shrink-0" size={20} />
+                      <p className="text-sm text-slate-300">
+                        This is an Azure Kubernetes Service cluster. We have established data-plane access to fetch workloads.
+                      </p>
+                    </div>
+                  </div>
+              </div>
             ) : (
               <div className="glass-panel p-6 rounded-xl border border-slate-800">
                 <div className="flex items-start gap-3 mb-4">
@@ -250,6 +260,12 @@ export default function ResourceDetailsPage() {
             )}
           </div>
         </div>
+        
+        {details.kubernetes && (
+          <div className="mt-8">
+            <KubernetesPanel k8sData={details.kubernetes} clusterId={resourceId} />
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

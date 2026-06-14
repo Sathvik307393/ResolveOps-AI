@@ -17,3 +17,6 @@ azure-mgmt-resource
 azure-mgmt-compute
 azure-mgmt-subscription
 azure-mgmt-monitor
+azure-mgmt-containerservice>=31.0.0
+kubernetes>=30.1.0  
+ 
