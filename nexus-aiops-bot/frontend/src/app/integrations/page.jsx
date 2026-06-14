@@ -365,6 +365,12 @@ export default function IntegrationsManager() {
               <p className="text-sm text-slate-400 leading-relaxed">
                 Provide Service Principal credentials to authorize resource discovery and log analytics querying.
               </p>
+              <div className="bg-sky-500/10 border border-sky-500/20 p-3 rounded-lg flex items-start gap-2">
+                <ShieldCheck className="text-sky-400 mt-0.5" size={16} shrink-0 />
+                <p className="text-xs text-sky-200">
+                  <strong className="text-sky-300">Note for AKS:</strong> To view internal Kubernetes workloads (Pods, Deployments), ensure the Service Principal is assigned the <strong>Azure Kubernetes Service Cluster User Role</strong> (or Admin) on the cluster or resource group.
+                </p>
+              </div>
               
               <div className="space-y-4">
                 <div className="flex bg-black/40 p-1.5 rounded-xl border border-slate-800">
