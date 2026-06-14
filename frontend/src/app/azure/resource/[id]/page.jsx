@@ -87,7 +87,7 @@ export default function ResourceDetailsPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col h-full font-sans pb-10 max-w-6xl mx-auto w-full">
+      <div className="flex flex-col h-full font-sans pb-10 max-w-[1500px] mx-auto w-full px-4 lg:px-8">
         <button 
           onClick={() => router.back()}
           className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 w-fit transition-colors"
