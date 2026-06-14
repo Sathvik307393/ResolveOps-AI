@@ -573,7 +573,7 @@ def ingest_telemetry(event: NexusEvent, current_user: dict = Depends(get_current
         else:
             # --- 2. Predictive Pipeline ---
             # Fetch recent logs for analyzing trends
-            recent_logs = db_get_logs(tenant_id, limit=50)
+            recent_logs = get_logs(tenant_id, limit=50)
             
             # Evaluate using predictive heuristics
             is_anomaly, prediction = predictive_engine.analyze_logs_and_predict(recent_logs)
@@ -1617,22 +1617,50 @@ def get_azure_resource_details(resource_id: str, current_user: dict = Depends(ge
             }
             
             try:
-                from azure_cost_service import get_estimated_resource_price
-                sku_name = None
-                if hasattr(r, 'sku') and r.sku and hasattr(r.sku, 'name'):
-                    sku_name = r.sku.name
+                from azure_cost_service import get_estimated_resource_price, get_actual_resource_cost, estimate_aks_cost
                 
-                # Best effort basic cost estimation
-                if sku_name:
-                    estimated_cost = get_estimated_resource_price(r.type, sku_name, r.location, "INR")
-                    details["cost_estimation"] = estimated_cost
+                actual_cost = get_actual_resource_cost(credential, sub_id, resource_id)
+                estimated_cost = None
+                breakdown = []
+                
+                # IMPORTANT NOTE: This complex Azure pricing logic currently resides in api-gateway-service.
+                # Per architecture guidelines, this should eventually be moved to the dedicated cost-insights-service.
+                
+                if "Microsoft.ContainerService/managedClusters" in resource_id and r.properties and "agentPoolProfiles" in r.properties:
+                    node_pools = []
+                    for ap in r.properties["agentPoolProfiles"]:
+                        node_pools.append({
+                            "name": ap.get("name"),
+                            "vmSize": ap.get("vmSize"),
+                            "count": ap.get("count"),
+                            "mode": ap.get("mode")
+                        })
+                    estimated_cost, breakdown = estimate_aks_cost(node_pools, r.location, "INR")
                 else:
-                    details["cost_estimation"] = {
-                        "status": "unavailable",
-                        "cost_note": "Estimated price unavailable without SKU. Actual usage cost may still appear through Cost Management."
-                    }
+                    sku_name = None
+                    if hasattr(r, 'sku') and r.sku and hasattr(r.sku, 'name'):
+                        sku_name = r.sku.name
+                        
+                    if sku_name:
+                        estimated_cost = get_estimated_resource_price(r.type, sku_name, r.location, "INR")
+                    else:
+                        estimated_cost = {
+                            "status": "unavailable",
+                            "warnings": ["Estimated price unavailable without SKU."]
+                        }
+                        
+                details["cost_intelligence"] = {
+                    "actual_cost": actual_cost,
+                    "estimated_running_price": estimated_cost,
+                    "breakdown": breakdown
+                }
             except Exception as e:
                 print(f"Cost estimation error: {e}")
+                details["cost_intelligence"] = {
+                    "actual_cost": {"status": "unavailable", "message": "Error calculating cost"},
+                    "estimated_running_price": {"status": "unavailable"},
+                    "breakdown": []
+                }
             
             # If it's an AKS cluster, fetch kubernetes internals
             if "Microsoft.ContainerService/managedClusters" in resource_id:
@@ -1685,8 +1713,8 @@ def get_azure_resource_activity(resource_id: str, current_user: dict = Depends(g
         monitor_client = MonitorManagementClient(credential, sub_id)
         
         # Get logs from last 7 days for this resource
-        today = datetime.utcnow()
-        start = today - timedelta(days=7)
+        today = datetime.datetime.utcnow()
+        start = today - datetime.timedelta(days=7)
         filter_str = f"eventTimestamp ge '{start.isoformat()}Z' and eventTimestamp le '{today.isoformat()}Z' and resourceUri eq '{resource_id}'"
         
         logs_iter = monitor_client.activity_logs.list(filter=filter_str)

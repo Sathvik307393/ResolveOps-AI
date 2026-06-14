@@ -179,13 +179,95 @@ def get_resource_group_cost(credentials, subscription_id: str) -> Dict[str, Dict
     set_cached_cost(cache_key, rg_costs)
     return rg_costs
 
+def get_actual_resource_cost(credentials, subscription_id: str, resource_id: str) -> Dict[str, Any]:
+    """Fetches MTD actual cost for a specific resource."""
+    cache_key = f"res_cost_{resource_id}"
+    cached = get_cached_cost(cache_key)
+    if cached:
+        return cached
+
+    scope = f"/subscriptions/{subscription_id}"
+    client = CostManagementClient(credentials=credentials)
+    
+    now = datetime.datetime.now()
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    end_date = now + datetime.timedelta(days=1)
+    
+    result = {
+        "status": "unavailable",
+        "month_to_date": 0.0,
+        "currency": "INR",
+        "source": "Azure Cost Management",
+        "last_updated": datetime.datetime.now(timezone.utc).isoformat(),
+        "message": ""
+    }
+    
+    try:
+        # Note: Cost management API limits resource-level queries. 
+        # Using a filter by ResourceId.
+        query_result = client.query.usage(
+            scope=scope,
+            parameters=QueryDefinition(
+                type="Usage",
+                timeframe="Custom",
+                time_period=QueryTimePeriod(
+                    from_property=start_of_month,
+                    to=end_date
+                ),
+                dataset=QueryDataset(
+                    granularity="None",
+                    aggregation={
+                        "totalCost": QueryAggregation(name="PreTaxCost", function="Sum")
+                    },
+                    filter={
+                        "dimensions": {
+                            "name": "ResourceId",
+                            "operator": "In",
+                            "values": [resource_id]
+                        }
+                    }
+                )
+            )
+        )
+        
+        if query_result.rows and len(query_result.rows) > 0:
+            row = query_result.rows[0]
+            result["month_to_date"] = round(float(row[0]), 2)
+            result["currency"] = str(row[1]) if len(row) > 1 else "INR"
+            result["status"] = "available"
+        else:
+            # If no rows, we return 0 but mark available
+            result["status"] = "available"
+            
+    except HttpResponseError as e:
+        if e.status_code == 403:
+            result["status"] = "permission_required"
+            result["message"] = "Cost Management Reader permission required."
+        else:
+            result["message"] = f"Failed to fetch cost: {str(e)}"
+    except Exception as e:
+        result["message"] = f"Error: {str(e)}"
+
+    set_cached_cost(cache_key, result)
+    return result
+
 def get_estimated_resource_price(resource_type: str, sku: str, location: str, currency: str = "INR") -> Dict[str, Any]:
-    """Fetches estimated running price using Azure Retail Prices API."""
+    """Fetches estimated running price using Azure Retail Prices API. Formatted for the new UI."""
+    result = {
+        "status": "unavailable",
+        "hourly": 0.0,
+        "daily": 0.0,
+        "monthly": 0.0,
+        "currency": currency,
+        "source": "Azure Retail Prices",
+        "confidence": "low",
+        "formula": "sku_price",
+        "warnings": []
+    }
+    
     if not sku:
-        return {
-            "status": "unavailable",
-            "cost_note": "Estimated price unavailable without SKU."
-        }
+        result["warnings"].append("Estimated price unavailable without SKU.")
+        return result
         
     cache_key = f"retail_price_{resource_type}_{sku}_{location}_{currency}"
     cached = get_cached_cost(cache_key)
@@ -193,10 +275,6 @@ def get_estimated_resource_price(resource_type: str, sku: str, location: str, cu
         return cached
         
     api_url = f"https://prices.azure.com/api/retail/prices?currencyCode={currency}"
-    
-    # Best-effort matching query
-    # Compute: armRegionName eq 'centralindia' and armSkuName eq 'Standard_D2s_v3' and priceType eq 'Consumption'
-    
     sku_clean = sku.replace(" ", "")
     query_filter = f"armRegionName eq '{location}' and armSkuName eq '{sku_clean}' and priceType eq 'Consumption'"
     
@@ -205,54 +283,125 @@ def get_estimated_resource_price(resource_type: str, sku: str, location: str, cu
         response.raise_for_status()
         data = response.json()
         
+        item = None
+        confidence = "low"
+        
         if data.get("Items") and len(data["Items"]) > 0:
-            # Get the first matching item (usually pay-as-you-go)
             item = data["Items"][0]
+            confidence = "high"
+        else:
+            # Fallback query
+            query_filter_fallback = f"armRegionName eq '{location}' and skuName eq '{sku_clean}'"
+            response_fb = requests.get(f"{api_url}&$filter={query_filter_fallback}", timeout=5)
+            data_fb = response_fb.json()
+            if data_fb.get("Items") and len(data_fb["Items"]) > 0:
+                item = data_fb["Items"][0]
+                confidence = "medium"
+                
+        if item:
             hourly_cost = item.get("retailPrice", 0.0)
-            
-            result = {
-                "currency": currency,
-                "currency_symbol": get_currency_symbol(currency),
-                "estimated_hourly_running": round(hourly_cost, 4),
-                "estimated_daily_running": round(hourly_cost * 24, 2),
-                "estimated_monthly_running": round(hourly_cost * 730, 2), # average hours in month
-                "cost_status": "estimated_only",
-                "cost_note": "Estimated running price is based on Azure Retail Prices and resource SKU/region. Actual billed cost may vary."
-            }
-            set_cached_cost(cache_key, result)
-            return result
-            
-        # Try finding a partial match if strict match failed
-        query_filter_fallback = f"armRegionName eq '{location}' and skuName eq '{sku_clean}'"
-        response_fb = requests.get(f"{api_url}&$filter={query_filter_fallback}", timeout=5)
-        data_fb = response_fb.json()
-        
-        if data_fb.get("Items") and len(data_fb["Items"]) > 0:
-            item = data_fb["Items"][0]
-            hourly_cost = item.get("retailPrice", 0.0)
-            
-            result = {
-                "currency": currency,
-                "currency_symbol": get_currency_symbol(currency),
-                "estimated_hourly_running": round(hourly_cost, 4),
-                "estimated_daily_running": round(hourly_cost * 24, 2),
-                "estimated_monthly_running": round(hourly_cost * 730, 2),
-                "cost_status": "estimated_only",
-                "cost_note": "Estimated running price is based on Azure Retail Prices and resource SKU/region. Actual billed cost may vary."
-            }
-            set_cached_cost(cache_key, result)
-            return result
-            
+            result.update({
+                "status": "available",
+                "hourly": round(hourly_cost, 4),
+                "daily": round(hourly_cost * 24, 2),
+                "monthly": round(hourly_cost * 730, 2),
+                "confidence": confidence,
+                "formula": "sku_price_per_hour",
+                "warnings": ["Estimated running price is based on Azure Retail Prices and resource SKU/region. Actual billed cost may vary."]
+            })
     except Exception as e:
-        print(f"Retail price fetch error: {str(e)}")
+        result["warnings"].append(f"Retail price fetch error: {str(e)}")
         
-    # If no matching SKU is found
-    result = {
-        "status": "unavailable",
-        "cost_note": "Estimated price unavailable for this resource SKU/region. Actual usage cost may still appear through Cost Management."
-    }
     set_cached_cost(cache_key, result)
     return result
+
+def estimate_aks_cost(node_pools: List[Dict], location: str, currency: str = "INR") -> Dict[str, Any]:
+    """Calculates AKS estimated running price using node pool VMs via Azure Retail Prices API."""
+    result = {
+        "status": "unavailable",
+        "hourly": 0.0,
+        "daily": 0.0,
+        "monthly": 0.0,
+        "currency": currency,
+        "source": "Azure Retail Prices",
+        "confidence": "high",
+        "formula": "sum(node_pool_hourly_price * node_count)",
+        "warnings": ["Cost is estimated from Azure Retail Prices API and may not match actual billed cost. AKS Node VM size is the main driver."]
+    }
+    
+    breakdown = []
+    total_hourly = 0.0
+    
+    api_url = f"https://prices.azure.com/api/retail/prices?currencyCode={currency}"
+    
+    for pool in node_pools:
+        name = pool.get("name", "Unknown")
+        vm_size = pool.get("vmSize", "")
+        count = pool.get("count", 0)
+        mode = pool.get("mode", "System")
+        
+        if not vm_size or count == 0:
+            continue
+            
+        vm_clean = vm_size.replace(" ", "")
+        
+        # Virtual Machines API mapping for standard VMs
+        query_filter = f"serviceName eq 'Virtual Machines' and armRegionName eq '{location}' and armSkuName eq '{vm_clean}' and priceType eq 'Consumption'"
+        
+        pool_item = {
+            "component": "AKS Node Pool",
+            "name": name,
+            "mode": mode,
+            "sku": vm_size,
+            "region": location,
+            "quantity": count,
+            "unit_price": 0.0,
+            "unit": "hour",
+            "hourly_total": 0.0,
+            "source": "Azure Retail Prices",
+            "confidence": "low"
+        }
+        
+        try:
+            response = requests.get(f"{api_url}&$filter={query_filter}", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("Items") and len(data["Items"]) > 0:
+                    item = data["Items"][0]
+                    pool_item["unit_price"] = item.get("retailPrice", 0.0)
+                    pool_item["hourly_total"] = pool_item["unit_price"] * count
+                    pool_item["confidence"] = "high"
+                    pool_item["meter_name"] = item.get("meterName", "")
+                else:
+                    # Fallback to skuName
+                    fallback_filter = f"serviceName eq 'Virtual Machines' and armRegionName eq '{location}' and skuName eq '{vm_clean}'"
+                    resp_fb = requests.get(f"{api_url}&$filter={fallback_filter}", timeout=5)
+                    data_fb = resp_fb.json()
+                    if data_fb.get("Items") and len(data_fb["Items"]) > 0:
+                        item = data_fb["Items"][0]
+                        pool_item["unit_price"] = item.get("retailPrice", 0.0)
+                        pool_item["hourly_total"] = pool_item["unit_price"] * count
+                        pool_item["confidence"] = "medium"
+                        pool_item["meter_name"] = item.get("meterName", "")
+                    else:
+                        result["warnings"].append(f"SKU price match failed for pool {name} ({vm_size}).")
+        except Exception as e:
+            result["warnings"].append(f"Failed to fetch price for pool {name}: {str(e)}")
+            
+        breakdown.append(pool_item)
+        total_hourly += pool_item["hourly_total"]
+        
+    if breakdown:
+        result["status"] = "available"
+        result["hourly"] = round(total_hourly, 4)
+        result["daily"] = round(total_hourly * 24, 2)
+        result["monthly"] = round(total_hourly * 730, 2)
+        if any(b["confidence"] == "low" for b in breakdown):
+            result["confidence"] = "low"
+        elif any(b["confidence"] == "medium" for b in breakdown):
+            result["confidence"] = "medium"
+            
+    return result, breakdown
 
 def clear_cost_cache():
     global _cost_cache
