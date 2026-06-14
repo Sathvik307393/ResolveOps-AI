@@ -41,7 +41,7 @@ def get_subscription_cost(credentials, subscription_id: str) -> Dict[str, Any]:
         return cached
 
     scope = f"/subscriptions/{subscription_id}"
-    client = CostManagementClient(credentials=credentials)
+    client = CostManagementClient(credential=credentials)
     
     # Time period: start of month to today
     now = datetime.datetime.now()
@@ -129,7 +129,7 @@ def get_resource_group_cost(credentials, subscription_id: str) -> Dict[str, Dict
         return cached
 
     scope = f"/subscriptions/{subscription_id}"
-    client = CostManagementClient(credentials=credentials)
+    client = CostManagementClient(credential=credentials)
     
     now = datetime.datetime.now()
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -187,7 +187,7 @@ def get_actual_resource_cost(credentials, subscription_id: str, resource_id: str
         return cached
 
     scope = f"/subscriptions/{subscription_id}"
-    client = CostManagementClient(credentials=credentials)
+    client = CostManagementClient(credential=credentials)
     
     now = datetime.datetime.now()
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)

@@ -224,6 +224,10 @@ export default function ResourceDetailsPage() {
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase border flex items-center gap-1 bg-amber-500/10 text-amber-400 border-amber-500/20">
                           Permission Required
                         </span>
+                      ) : details.cost_intelligence.actual_cost?.status === "unavailable" ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase border flex items-center gap-1 bg-slate-500/10 text-slate-400 border-slate-500/20">
+                          Unavailable
+                        </span>
                       ) : (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase border flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
                           Available
@@ -233,6 +237,8 @@ export default function ResourceDetailsPage() {
 
                     {details.cost_intelligence.actual_cost?.status === "permission_required" ? (
                       <p className="text-xs text-amber-400/80 mb-2">{details.cost_intelligence.actual_cost.message}</p>
+                    ) : details.cost_intelligence.actual_cost?.status === "unavailable" ? (
+                      <p className="text-xs text-slate-400 mb-2">{details.cost_intelligence.actual_cost?.message || "Actual cost data unavailable."}</p>
                     ) : (
                       <div className="flex items-end gap-2 mb-1">
                         <span className="text-3xl font-black text-white tracking-tight">
