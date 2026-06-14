@@ -9,22 +9,8 @@ import { fetchApi } from "@/lib/api";
 export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
-  const [sessions, setSessions] = useState([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [integrations, setIntegrations] = useState({ github: false, aws: false, azure: false });
-
-  const loadHistory = () => {
-    const token = typeof window !== 'undefined' && localStorage.getItem("jwt_token");
-    if (!token) return;
-    
-    fetchApi("/api/chat/sessions")
-      .then((res) => {
-        if (Array.isArray(res)) {
-          setSessions(res);
-        }
-      })
-      .catch((err) => console.error("Failed to load sidebar chat sessions:", err));
-  };
 
   const loadIntegrations = () => {
     const token = typeof window !== 'undefined' && localStorage.getItem("jwt_token");
@@ -38,13 +24,7 @@ export default function Sidebar() {
   };
 
   useEffect(() => {
-    loadHistory();
     loadIntegrations();
-
-    window.addEventListener("chat-updated", loadHistory);
-    return () => {
-      window.removeEventListener("chat-updated", loadHistory);
-    };
   }, [pathname]);
 
   const handleLogout = () => {
@@ -105,30 +85,7 @@ export default function Sidebar() {
           );
         })}
 
-        {!isCollapsed && sessions.length > 0 && (
-          <div className="pt-4 border-t border-slate-800/50 mt-4 px-2 animate-in fade-in duration-300">
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-2">Recent Chats</p>
-            <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-              {sessions.map((session, index) => {
-                const dateObj = new Date(session.timestamp);
-                const isToday = new Date().toDateString() === dateObj.toDateString();
-                const dateLabel = isToday ? "Today" : dateObj.toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
-                
-                return (
-                  <Link key={session.session_id} href={`/chat?session_id=${session.session_id}`}>
-                    <div className="w-full flex items-center space-x-2 px-2 py-2 rounded-lg text-xs text-slate-400 hover:text-indigo-400 hover:bg-white/5 transition-all group">
-                      <MessageSquare size={12} className="shrink-0 text-slate-500 group-hover:text-indigo-400" />
-                      <div className="flex-1 min-w-0 overflow-hidden">
-                        <div className="truncate font-semibold text-slate-300 group-hover:text-indigo-200 transition-colors" title={session.title}>{session.title}</div>
-                        <div className="text-[9px] text-slate-500 mt-0.5">{dateLabel}</div>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
+
       </nav>
 
       <div className="p-4 mt-auto">
