@@ -1742,15 +1742,17 @@ def get_azure_resource_activity(resource_id: str, current_user: dict = Depends(g
 @app.post("/api/v1/ai/analyze-failure")
 def analyze_failure(req: AnalyzeFailureRequest, current_user: dict = Depends(get_current_user)):
     try:
-        import google.generativeai as genai
+        from langchain_aws import ChatBedrock
+        import boto3
         import os
         
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
-        if not gemini_api_key:
-            return {"analysis": "AI Copilot requires GEMINI_API_KEY to analyze failures."}
-            
-        genai.configure(api_key=gemini_api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        aws_region = os.getenv("AWS_REGION", "us-east-1")
+        bedrock_client = boto3.client("bedrock-runtime", region_name=aws_region)
+        model = ChatBedrock(
+            client=bedrock_client,
+            model_id=os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0"),
+            model_kwargs={"temperature": 0.1}
+        )
         
         prompt = f"""You are an expert Cloud SRE and AI Copilot. 
 Analyze the following Azure failure log for resource {req.resource_id}.
@@ -1759,8 +1761,8 @@ Provide a concise 'Root Cause' and a step-by-step 'Solution'. Use markdown forma
 Log message:
 {req.log_message}
 """
-        response = model.generate_content(prompt)
-        return {"analysis": response.text}
+        response = model.invoke(prompt)
+        return {"analysis": response.content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI analysis failed: {str(e)}")
 
