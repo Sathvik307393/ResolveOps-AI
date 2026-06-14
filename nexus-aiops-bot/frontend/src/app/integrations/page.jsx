@@ -368,7 +368,7 @@ export default function IntegrationsManager() {
               <div className="bg-sky-500/10 border border-sky-500/20 p-3 rounded-lg flex items-start gap-2">
                 <ShieldCheck className="text-sky-400 mt-0.5" size={16} shrink-0 />
                 <p className="text-xs text-sky-200">
-                  <strong className="text-sky-300">Note for AKS:</strong> To view internal Kubernetes workloads (Pods, Deployments), ensure the Service Principal is assigned the <strong>Azure Kubernetes Service Cluster User Role</strong> (or Admin) on the cluster or resource group.
+                  <strong className="text-sky-300">Note for AKS:</strong> To securely view internal Kubernetes workloads, ensure the Service Principal is assigned the <strong>Azure Kubernetes Service Cluster User Role</strong>. Do not use the Admin role for security reasons.
                 </p>
               </div>
               
