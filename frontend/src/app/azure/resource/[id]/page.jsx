@@ -7,6 +7,8 @@ import { fetchApi } from "@/lib/api";
 import { Activity, AlertCircle, ArrowLeft, Cpu, Hexagon, Info, Server, Sparkles, AlertTriangle, DollarSign, CheckCircle } from "lucide-react";
 import MarkdownRenderer from "@/components/common/MarkdownRenderer";
 import AksWorkloadSummary from "@/components/azure/aks/AksWorkloadSummary";
+import ResourceRiskList from "@/components/resource-intelligence/ResourceRiskList";
+import { normalizeRiskEvent } from "@/lib/resourceRiskFormatters";
 
 export default function ResourceDetailsPage() {
   const params = useParams();
@@ -142,63 +144,10 @@ export default function ResourceDetailsPage() {
               <Activity className="text-sky-400" /> Activity Logs & Failures
             </h3>
             
-            {activities.length === 0 ? (
-              <div className="glass-panel p-8 rounded-xl text-center text-slate-400 border border-slate-800">
-                No recent activity logs found for this resource.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {activities.map((log) => {
-                  const isFailure = log.status === "Failed" || log.level === "Error";
-                  return (
-                    <div key={log.id} className={`glass-panel p-5 rounded-xl border ${isFailure ? 'border-red-500/30 bg-red-500/5' : 'border-slate-800'}`}>
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex items-center gap-2">
-                          {isFailure ? <AlertCircle className="text-red-400" size={18} /> : <Info className="text-sky-400" size={18} />}
-                          <h4 className="text-white font-semibold">{log.operationName}</h4>
-                        </div>
-                        <span className="text-xs text-slate-500 font-mono">
-                          {log.eventTimestamp ? new Date(log.eventTimestamp).toLocaleString() : 'Unknown Time'}
-                        </span>
-                      </div>
-                      
-                      <div className="text-sm text-slate-300 bg-slate-900/50 p-3 rounded border border-slate-800/50 mb-3 font-mono">
-                        {log.description || "No detailed description provided."}
-                      </div>
-
-                      {isFailure && (
-                        <div className="mt-4 pt-4 border-t border-red-500/20">
-                          {!aiAnalysis[log.id] ? (
-                            <button
-                              onClick={() => handleAnalyzeFailure(log)}
-                              disabled={analyzingLogId === log.id}
-                              className="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all disabled:opacity-50"
-                            >
-                              {analyzingLogId === log.id ? (
-                                <><Activity size={16} className="animate-spin" /> Analyzing with AI...</>
-                              ) : (
-                                <><Sparkles size={16} /> Analyze Failure with AI Copilot</>
-                              )}
-                            </button>
-                          ) : (
-                            <div className="bg-slate-900/80 rounded-xl border border-indigo-500/30 overflow-hidden relative">
-                              <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-indigo-500 to-purple-500"></div>
-                              <div className="p-4 bg-indigo-500/5 border-b border-indigo-500/10 flex items-center gap-2">
-                                <Sparkles className="text-indigo-400" size={18} />
-                                <span className="font-bold text-indigo-300">AI Copilot Analysis</span>
-                              </div>
-                              <div className="p-5 prose prose-invert prose-sm max-w-none prose-headings:text-indigo-300 prose-a:text-sky-400">
-                                <MarkdownRenderer content={aiAnalysis[log.id]} />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <ResourceRiskList 
+              items={activities.map(log => normalizeRiskEvent(log, "azure", details.type))} 
+              emptyType="events" 
+            />
           </div>
 
           <div className="space-y-6">

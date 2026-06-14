@@ -1,12 +1,17 @@
 "use client";
 
 import React from "react";
-import { Layout, Server, Cpu, HardDrive, ShieldAlert, Zap, Sparkles } from "lucide-react";
-import AksRiskSummaryCards from "../AksRiskSummaryCards";
+import { Layout, Server, Cpu, HardDrive, ShieldAlert, Zap, Sparkles, Activity, AlertCircle } from "lucide-react";
+import ResourceRiskSummaryCards from "@/components/resource-intelligence/ResourceRiskSummaryCards";
 
 export default function AksOverviewTab({ summary, risks, setActiveTab }) {
   // Take top 3 most severe risks
   const topRisks = risks?.slice(0, 3) || [];
+
+  const aksMetrics = [
+    { label: "Pending Pods", value: summary.pending_pods || 0, color: "amber", icon: Activity },
+    { label: "Failed Pods", value: summary.failed_pods || 0, color: "slate", icon: AlertCircle }
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -21,7 +26,7 @@ export default function AksOverviewTab({ summary, risks, setActiveTab }) {
         </button>
       </div>
 
-      <AksRiskSummaryCards summary={summary} risks={risks} />
+      <ResourceRiskSummaryCards risks={risks} customMetrics={aksMetrics} />
 
       {/* Primary Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
