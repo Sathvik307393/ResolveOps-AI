@@ -178,7 +178,7 @@ export default function AICopilot() {
     const token = localStorage.getItem("jwt_token");
     if (!token) { router.push("/login"); return; }
     const payload = decodeJwtPayload(token);
-    const name = payload.full_name || payload.email || "";
+    const name = payload.username || payload.full_name || payload.email?.split("@")[0] || "";
     setFullName(name);
 
     const sid = new URLSearchParams(window.location.search).get("session_id");
