@@ -1,10 +1,15 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Layout, Server, Cpu, HardDrive, ShieldAlert, Zap, Sparkles, Activity, AlertCircle } from "lucide-react";
 import ResourceRiskSummaryCards from "@/components/resource-intelligence/ResourceRiskSummaryCards";
+import { fetchApi } from "@/lib/api";
+import MarkdownRenderer from "@/components/common/MarkdownRenderer";
 
-export default function AksOverviewTab({ summary, risks, setActiveTab }) {
+export default function AksOverviewTab({ summary, risks, setActiveTab, clusterId }) {
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState(null);
+
   // Take top 3 most severe risks
   const topRisks = risks?.slice(0, 3) || [];
 
@@ -13,6 +18,25 @@ export default function AksOverviewTab({ summary, risks, setActiveTab }) {
     { label: "Failed Pods", value: summary.failed_pods || 0, color: "slate", icon: AlertCircle }
   ];
 
+  const handleAnalyze = async () => {
+    if (analysis) return;
+    setAnalyzing(true);
+    try {
+      const result = await fetchApi("/api/v1/ai/analyze-failure", {
+        method: "POST",
+        body: JSON.stringify({
+          log_message: `Generate Root Cause Analysis for overall AKS Cluster Health. Found ${risks?.length || 0} risks. Top risks: ${topRisks.map(r => r.type).join(', ')}.`,
+          resource_id: clusterId || "aks-cluster"
+        })
+      });
+      setAnalysis(result.analysis);
+    } catch (err) {
+      setAnalysis("Failed to generate Cluster Root Cause Analysis.");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
@@ -20,11 +44,25 @@ export default function AksOverviewTab({ summary, risks, setActiveTab }) {
           <Zap className="text-emerald-400" size={20} /> Cluster Overview
         </h3>
         <button 
-          className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors shadow-lg shadow-indigo-500/20"
+          onClick={handleAnalyze}
+          disabled={analyzing}
+          className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors shadow-lg shadow-indigo-500/20 disabled:opacity-50"
         >
-          <Sparkles size={16} /> Generate Cluster RCA
+          {analyzing ? <><Activity size={16} className="animate-spin" /> Generating RCA...</> : <><Sparkles size={16} /> Generate Cluster RCA</>}
         </button>
       </div>
+
+      {analysis && (
+        <div className="bg-indigo-500/5 rounded-xl border border-indigo-500/20 overflow-hidden mb-6">
+          <div className="p-4 bg-indigo-500/10 border-b border-indigo-500/20 flex items-center gap-2">
+            <Sparkles className="text-indigo-400" size={18} />
+            <span className="text-sm font-bold text-indigo-300">AI Cluster Root Cause Analysis</span>
+          </div>
+          <div className="p-5 prose prose-invert prose-sm max-w-none prose-headings:text-indigo-300 prose-a:text-sky-400">
+            <MarkdownRenderer content={analysis} />
+          </div>
+        </div>
+      )}
 
       <ResourceRiskSummaryCards risks={risks} customMetrics={aksMetrics} />
 

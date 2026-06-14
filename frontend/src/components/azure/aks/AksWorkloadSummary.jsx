@@ -105,7 +105,7 @@ export default function AksWorkloadSummary({ k8sData, clusterId }) {
 
       {/* Tab Content */}
       <div className="min-h-[400px]">
-        {activeTab === "overview" && <AksOverviewTab summary={summary} risks={risks} setActiveTab={handleTabChange} />}
+        {activeTab === "overview" && <AksOverviewTab summary={summary} risks={risks} setActiveTab={handleTabChange} clusterId={clusterId} />}
         {activeTab === "risks" && <AksRisksTab risks={risks} clusterId={clusterId} />}
         {activeTab === "pods" && <AksPodsTab pods={pods} />}
         {activeTab === "deployments" && <AksDeploymentsTab deployments={deployments} />}
