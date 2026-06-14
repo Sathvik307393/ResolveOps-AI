@@ -4,7 +4,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://api-gateway-service:8000/:path*', // Forward to the API Gateway Docker service
+        destination: 'http://api-gateway-service:8000/api/:path*',
       },
     ];
   },
