@@ -94,16 +94,16 @@ export default function MarkdownRenderer({ content }) {
   return (
     <ReactMarkdown
       components={{
-        pre: ({ ...props }) => <CodeBlock {...props} />,
-        code: ({ ...props }) => <code className="bg-slate-800 text-indigo-300 px-1 py-0.5 rounded text-xs font-mono" {...props} />,
-        h1: ({ ...props }) => <h1 className="text-lg font-bold text-white mt-4 mb-2 first:mt-0" {...props} />,
-        h2: ({ ...props }) => <h2 className="text-md font-semibold text-white mt-3 mb-1 first:mt-0" {...props} />,
-        h3: ({ ...props }) => <h3 className="text-sm font-semibold text-slate-200 mt-2 mb-1 first:mt-0" {...props} />,
-        ul: ({ ...props }) => <ul className="list-disc pl-5 space-y-1 my-2" {...props} />,
-        ol: ({ ...props }) => <ol className="list-decimal pl-5 space-y-1 my-2" {...props} />,
-        li: ({ ...props }) => <li className="text-slate-300" {...props} />,
-        p: ({ ...props }) => <p className="mb-2 last:mb-0" {...props} />,
-        a: ({ ...props }) => <a className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />
+        pre: ({ node, ...props }) => <CodeBlock {...props} />,
+        code: ({ node, ...props }) => <code className="bg-slate-800 text-indigo-300 px-1 py-0.5 rounded text-xs font-mono" {...props} />,
+        h1: ({ node, ...props }) => <h1 className="text-lg font-bold text-white mt-4 mb-2 first:mt-0" {...props} />,
+        h2: ({ node, ...props }) => <h2 className="text-md font-semibold text-white mt-3 mb-1 first:mt-0" {...props} />,
+        h3: ({ node, ...props }) => <h3 className="text-sm font-semibold text-slate-200 mt-2 mb-1 first:mt-0" {...props} />,
+        ul: ({ node, ...props }) => <ul className="list-disc pl-5 space-y-1 my-2" {...props} />,
+        ol: ({ node, ...props }) => <ol className="list-decimal pl-5 space-y-1 my-2" {...props} />,
+        li: ({ node, ...props }) => <li className="text-slate-300" {...props} />,
+        p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+        a: ({ node, ...props }) => <a className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />
       }}
     >
       {content}
