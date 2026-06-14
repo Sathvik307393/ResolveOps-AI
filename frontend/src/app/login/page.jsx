@@ -16,7 +16,7 @@ import { Mail, ShieldCheck, ArrowRight, Cpu, Eye, EyeOff } from "lucide-react";
 
 function RegisterForm() {
   const router = useRouter();
-  const [step, setStep] = useState<RegStep>("details");
+  const [step, setStep] = useState("details");
   const [fullName, setFullName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
