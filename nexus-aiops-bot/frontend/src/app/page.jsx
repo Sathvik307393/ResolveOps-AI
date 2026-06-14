@@ -17,8 +17,8 @@ export default function GlobalDashboard() {
   const [integrations, setIntegrations] = useState({});
   const [stats, setStats] = useState({
     aws: 0, azure: 0, 
-    incidents: 2, risks: 5, cost: "$1,240.00", 
-    failures: 0, health: "98.5%"
+    incidents: 0, risks: 0, cost: "$0.00", 
+    failures: 0, health: "100%"
   });
   const [deployments, setDeployments] = useState([]);
 
@@ -37,13 +37,15 @@ export default function GlobalDashboard() {
       const failedPipelines = Array.isArray(depData) ? depData.filter(d => d.conclusion === "failure").length : 0;
       setDeployments(Array.isArray(depData) ? depData.slice(0, 3) : []);
 
-      setStats(prev => ({ 
-        ...prev, 
+      setStats({ 
         aws: awsCount, 
         azure: azureCount,
+        incidents: 0, // In reality, fetch from an incidents API
+        risks: 0,     // In reality, fetch from a risks API
+        cost: "$0.00", // In reality, fetch from billing API
         failures: failedPipelines,
-        health: failedPipelines > 0 ? "92.0%" : "99.9%"
-      }));
+        health: failedPipelines > 0 ? "92.0%" : "100%"
+      });
       
       setLoading(false);
     });
@@ -113,7 +115,7 @@ export default function GlobalDashboard() {
           <StatCard title="Platform Health" value={stats.health} icon={<Activity />} color="emerald" />
           <StatCard title="Connected Orgs" value={totalConnected} icon={<Network />} color="indigo" />
           <StatCard title="Total Resources" value={totalResources} icon={<Server />} color="sky" />
-          <StatCard title="Critical Risks" value={stats.risks} icon={<ShieldAlert />} color="amber" alert />
+          <StatCard title="Critical Risks" value={stats.risks} icon={<ShieldAlert />} color="amber" alert={stats.risks > 0} />
           <StatCard title="Failed Pipelines" value={stats.failures} icon={<AlertTriangle />} color="rose" alert={stats.failures > 0} />
           <StatCard title="Est. Cloud Cost" value={stats.cost} icon={<DollarSign />} color="slate" />
         </div>
@@ -160,10 +162,10 @@ export default function GlobalDashboard() {
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <Zap size={18} className="text-indigo-400" /> AI Recommendations
               </h3>
-              <span className="bg-indigo-500/10 text-indigo-400 px-2.5 py-1 rounded text-xs font-bold uppercase">Live</span>
+              <span className="bg-slate-800 text-slate-400 px-2.5 py-1 rounded text-[10px] font-bold uppercase border border-slate-700">Demo Data</span>
             </div>
             
-            <div className="space-y-4">
+            <div className="space-y-4 opacity-60">
               <RecommendationRow 
                 type="risk"
                 title="Potential CPU Exhaustion detected in Azure VMSS"
