@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
+from pydantic import BaseModel
 from typing import List, Dict, Optional
 from app.services.aws_resource_discovery_service import AWSResourceDiscoveryService
 from app.services.aws_cost_service import AWSCostService
@@ -11,30 +12,31 @@ router = APIRouter(prefix="/api/v1/aws/resources", tags=["AWS Resources"])
 # In-memory mock for now since we asked the user about DB choices
 _db_cache = {}
 
-@router.post("/sync")
-def sync_resources(
-    auth_method: str,
-    access_key_id: Optional[str] = None,
-    secret_access_key: Optional[str] = None,
-    role_arn: Optional[str] = None,
-    external_id: Optional[str] = None,
+class SyncRequest(BaseModel):
+    auth_method: str = "environment"
+    access_key_id: Optional[str] = None
+    secret_access_key: Optional[str] = None
+    role_arn: Optional[str] = None
+    external_id: Optional[str] = None
     regions: List[str] = ["us-east-1"]
-):
+
+@router.post("/sync")
+def sync_resources(req: SyncRequest = Body(...)):
     """
     Triggers a manual sync of all AWS resources across specified regions.
     """
     auth_kwargs = {}
-    if auth_method == "access_keys":
-        if not access_key_id or not secret_access_key:
+    if req.auth_method == "access_keys":
+        if not req.access_key_id or not req.secret_access_key:
             raise HTTPException(status_code=400, detail="Missing access keys")
         auth_kwargs = {
-            'aws_access_key_id': access_key_id,
-            'aws_secret_access_key': secret_access_key
+            'aws_access_key_id': req.access_key_id,
+            'aws_secret_access_key': req.secret_access_key
         }
-    elif auth_method == "role_arn":
+    elif req.auth_method == "role_arn":
         # Role assume logic would go here to generate temp credentials
         pass
-    elif auth_method == "environment":
+    elif req.auth_method == "environment":
         # Leave auth_kwargs empty to use boto3 default resolution (.env or EC2 role)
         auth_kwargs = {}
     else:
@@ -42,7 +44,7 @@ def sync_resources(
 
     try:
         service = AWSResourceDiscoveryService(auth_kwargs)
-        resources = service.scan_regions(regions)
+        resources = service.scan_regions(req.regions)
         
         # Simple cache logic
         _db_cache["resources"] = resources
@@ -65,7 +67,7 @@ def sync_resources(
         return {
             "status": status_str,
             "account_id": service.account_id if hasattr(service, "account_id") else "",
-            "regions_scanned": regions,
+            "regions_scanned": req.regions,
             "resources_count": len(resources),
             "summary": {
                 "ec2_instances": ec2,
