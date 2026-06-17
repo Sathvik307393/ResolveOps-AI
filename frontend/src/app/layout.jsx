@@ -12,8 +12,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Nexus AI",
-  description: "Log Analyser and Incident Responder",
+  title: "ResolveOps AI",
+  description: "AI-powered autonomous SRE and incident resolution platform.",
 };
 
 export default function RootLayout({ children }) {

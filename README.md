@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🛡️ Nexus AI
+# 🛡️ ResolveOps AI
 
 ### Autonomous SRE & Incident Intelligence Platform
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-nexusai.sathvikdevops.online-6366f1?style=for-the-badge&logo=vercel)](https://nexusai.sathvikdevops.online)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-resolveops-ai.sathvikdevops.online-6366f1?style=for-the-badge&logo=vercel)](https://resolveops-ai.sathvikdevops.online)
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Next.js-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
 [![AWS DynamoDB](https://img.shields.io/badge/AWS%20DynamoDB-4053D6?style=for-the-badge&logo=amazon-aws)](https://aws.amazon.com/dynamodb)
@@ -25,19 +25,19 @@ This manual, disjointed workflow leads to:
 - **Increased operational toil and engineer burnout**
 - **Reduced overall system reliability and disrupted end-user experiences**
 
-**Nexus AI** solves this by acting as an autonomous on-call engineer. It continuously ingests telemetry, proactively detects anomalies, automatically generates Root Cause Analysis (RCA) reports using a RAG-powered LLM engine, and centralizes insights into a single, unified dashboard.
+**ResolveOps AI** solves this by acting as an autonomous on-call engineer. It continuously ingests telemetry, proactively detects anomalies, automatically generates Root Cause Analysis (RCA) reports using a RAG-powered LLM engine, and centralizes insights into a single, unified dashboard.
 
 ---
 
-## ✨ What is Nexus AI?
+## ✨ What is ResolveOps AI?
 
-Nexus AI is a multi-tenant **AI-powered Site Reliability Engineering (SRE) platform** deployed as a production-grade web application. It automates monitoring and incident resolution, dispatching targeted notifications and providing actionable DevOps insights from a stunning, glassmorphic Next.js dashboard.
+ResolveOps AI is a multi-tenant **AI-powered Site Reliability Engineering (SRE) platform** deployed as a production-grade web application. It automates monitoring and incident resolution, dispatching targeted notifications and providing actionable DevOps insights from a stunning, glassmorphic Next.js dashboard.
 
 ---
 
 ## ⚙️ Tech Stack
 
-Nexus AI leverages a modern, distributed technology stack designed for high availability and low latency:
+ResolveOps AI leverages a modern, distributed technology stack designed for high availability and low latency:
 
 ### Backend & Microservices
 - **Python 3.11 & FastAPI**: High-performance asynchronous framework for building microservices.
@@ -63,7 +63,7 @@ Nexus AI leverages a modern, distributed technology stack designed for high avai
 
 ## 📡 Connections & Inter-Service Communication
 
-Nexus AI is built on a distributed microservices architecture consisting of several dedicated services (e.g., `api-gateway-service`, `ai-rca-service`, `aws-intelligence-service`, `azure-intelligence-service`, `github-intelligence-service`, and `notification-service`). 
+ResolveOps AI is built on a distributed microservices architecture consisting of several dedicated services (e.g., `api-gateway-service`, `ai-rca-service`, `aws-intelligence-service`, `azure-intelligence-service`, `github-intelligence-service`, and `notification-service`). 
 
 Here is how these services connect and establish communication:
 

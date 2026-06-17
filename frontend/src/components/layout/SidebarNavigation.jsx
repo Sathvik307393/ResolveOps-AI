@@ -45,12 +45,12 @@ export default function Sidebar() {
   return (
     <aside className={`border-r border-slate-800/50 glass-panel flex flex-col z-10 m-4 rounded-xl overflow-hidden shrink-0 transition-all duration-300 ease-in-out ${isCollapsed ? 'w-20' : 'w-64'}`}>
       <div className={`p-6 flex items-center mb-4 transition-all duration-300 ${isCollapsed ? 'justify-center space-x-0' : 'space-x-3'}`}>
-        <div className="text-indigo-500 shrink-0">
-          <Cpu size={32} />
+        <div className="shrink-0 flex items-center justify-center">
+          <img src="/resolveops-icon.svg" alt="ResolveOps AI" className="w-8 h-8" />
         </div>
         {!isCollapsed && (
           <div className="animate-in fade-in duration-300 whitespace-nowrap overflow-hidden">
-            <h1 className="font-bold text-lg tracking-tight leading-none text-slate-100">Nexus AI</h1>
+            <h1 className="font-bold text-lg tracking-tight leading-none text-slate-100">ResolveOps AI</h1>
             <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">Command Center</p>
           </div>
         )}

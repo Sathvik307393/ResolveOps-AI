@@ -8,7 +8,7 @@ from email.mime.text import MIMEText
 
 logger = logging.getLogger(__name__)
 
-DASHBOARD_URL = "https://nexusai.sathvikdevops.online"
+DASHBOARD_URL = "https://resolveops-ai.sathvikdevops.online"
 
 # ─── SMTP Configuration ──────────────────────────────────────────────────────
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
@@ -50,7 +50,7 @@ def _send_smtp(recipient: str, subject: str, html_body: str) -> bool:
 
 
 def _html_wrapper(title: str, body_html: str) -> str:
-    """Wraps content in a premium, on-brand Nexus AI email template."""
+    """Wraps content in a premium, on-brand ResolveOps AI email template."""
     return f"""
     <!DOCTYPE html>
     <html>
@@ -79,7 +79,7 @@ def _html_wrapper(title: str, body_html: str) -> str:
     <body>
       <div class="container">
         <div class="header">
-          <h1>⬡ Nexus AI</h1>
+          <h1>⬡ ResolveOps AI</h1>
           <p>Autonomous SRE & Incident Intelligence Platform</p>
         </div>
         <div class="body">
@@ -87,7 +87,7 @@ def _html_wrapper(title: str, body_html: str) -> str:
           {body_html}
         </div>
         <div class="footer">
-          <p>Nexus AI · <a href="{DASHBOARD_URL}" style="color:#6366f1;">nexusai.sathvikdevops.online</a> · This is an automated notification.</p>
+          <p>ResolveOps AI · <a href="{DASHBOARD_URL}" style="color:#6366f1;">resolveops-ai.sathvikdevops.online</a> · This is an automated notification.</p>
         </div>
       </div>
     </body>
@@ -102,14 +102,14 @@ def send_otp_email(email: str, full_name: str, otp_code: str) -> bool:
     first_name = full_name.split()[0] if full_name else "there"
     body = f"""
         <p>Hi <strong>{first_name}</strong>,</p>
-        <p>Welcome to <strong>Nexus AI</strong>! To verify your email address and activate your account, please enter the OTP below:</p>
+        <p>Welcome to <strong>ResolveOps AI</strong>! To verify your email address and activate your account, please enter the OTP below:</p>
         <div class="otp-box">
           <div class="otp-code">{otp_code}</div>
           <p style="color:#64748b; font-size:13px; margin-top:12px;">This code expires in <strong>2 minutes</strong>.</p>
         </div>
         <p style="color:#64748b; font-size:13px;">If you did not request this, please ignore this email.</p>
     """
-    return _send_smtp(email, "Your Nexus AI Verification Code", _html_wrapper("Email Verification", body))
+    return _send_smtp(email, "Your ResolveOps AI Verification Code", _html_wrapper("Email Verification", body))
 
 
 def notify_incident_created(tenant_email: str, incident_id: str, service: str, severity: str, full_name: str = "") -> bool:
@@ -118,7 +118,7 @@ def notify_incident_created(tenant_email: str, incident_id: str, service: str, s
     badge_class = "badge-critical" if severity in ("CRITICAL", "FATAL", "ERROR") else "badge-warning"
     body = f"""
         <p>Hi <strong>{first_name}</strong>,</p>
-        <p>A new infrastructure anomaly has been detected and automatically registered as an incident in your Nexus AI dashboard.</p>
+        <p>A new infrastructure anomaly has been detected and automatically registered as an incident in your ResolveOps AI dashboard.</p>
         <div class="card">
           <table style="width:100%; border-collapse:collapse;">
             <tr><td style="color:#64748b; padding: 6px 0; font-size:13px;">Incident ID</td><td style="color:#f1f5f9; font-weight:600; font-size:13px;">{incident_id}</td></tr>
@@ -126,10 +126,10 @@ def notify_incident_created(tenant_email: str, incident_id: str, service: str, s
             <tr><td style="color:#64748b; padding: 6px 0; font-size:13px;">Severity</td><td><span class="{badge_class}">{severity}</span></td></tr>
           </table>
         </div>
-        <p>The Nexus AI RAG engine is now analyzing your logs to generate a Root Cause Analysis. You will receive the full report in a follow-up email.</p>
+        <p>The ResolveOps AI RAG engine is now analyzing your logs to generate a Root Cause Analysis. You will receive the full report in a follow-up email.</p>
         <a href="{DASHBOARD_URL}" class="btn">View Incident Dashboard →</a>
     """
-    subject = f"[{severity}] Nexus AI Alert: {incident_id} on {service}"
+    subject = f"[{severity}] ResolveOps AI Alert: {incident_id} on {service}"
     return _send_smtp(tenant_email, subject, _html_wrapper(f"New {severity} Incident Detected", body))
 
 
@@ -139,13 +139,13 @@ def notify_rca_completed(tenant_email: str, incident_id: str, service: str, rca_
     formatted_rca = rca_report.replace("\n", "<br>")
     body = f"""
         <p>Hi <strong>{first_name}</strong>,</p>
-        <p>The Nexus AI RCA engine has completed its analysis for incident <strong>{incident_id}</strong> on <strong>{service}</strong>.</p>
+        <p>The ResolveOps AI RCA engine has completed its analysis for incident <strong>{incident_id}</strong> on <strong>{service}</strong>.</p>
         <div class="card">
           <pre>{formatted_rca}</pre>
         </div>
         <a href="{DASHBOARD_URL}" class="btn">View Full Report →</a>
     """
-    subject = f"Nexus AI RCA Complete: {incident_id} ({service})"
+    subject = f"ResolveOps AI RCA Complete: {incident_id} ({service})"
     return _send_smtp(tenant_email, subject, _html_wrapper("Root Cause Analysis Ready", body))
 
 
@@ -179,7 +179,7 @@ def notify_predictive_alert(
     body = f"""
         <p>Hi <strong>{first_name}</strong>,</p>
         <p style="color:#f43f5e; font-weight:600; font-size:15px;">⚠️ Proactive Alert: Impending Outage Predicted</p>
-        <p>Nexus AI has detected anomalous log patterns suggesting a potential failure in your service. Operational stats indicate an elevated risk profile.</p>
+        <p>ResolveOps AI has detected anomalous log patterns suggesting a potential failure in your service. Operational stats indicate an elevated risk profile.</p>
         
         <div class="card">
           <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
@@ -228,7 +228,7 @@ def notify_pipeline_failure(
     body = f"""
         <p>Hi <strong>{first_name}</strong>,</p>
         <p style="color:#f43f5e; font-weight:600; font-size:15px;">❌ Pipeline Execution Failed</p>
-        <p>Nexus AI has detected a failure in your CI/CD pipeline and has automatically diagnosed the root cause.</p>
+        <p>ResolveOps AI has detected a failure in your CI/CD pipeline and has automatically diagnosed the root cause.</p>
         
         <div class="card">
           <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
@@ -238,7 +238,7 @@ def notify_pipeline_failure(
         </div>
 
         <div class="card" style="background:#0f172a; border-left:4px solid #6366f1;">
-          <h4 style="margin:0 0 8px 0; color:#818cf8; font-size:14px;">🤖 Nexus AI Root Cause & Prediction</h4>
+          <h4 style="margin:0 0 8px 0; color:#818cf8; font-size:14px;">🤖 ResolveOps AI Root Cause & Prediction</h4>
           <p style="margin:0; font-size:13px; color:#e2e8f0; line-height:1.5;">{formatted_diagnosis}</p>
         </div>
 
