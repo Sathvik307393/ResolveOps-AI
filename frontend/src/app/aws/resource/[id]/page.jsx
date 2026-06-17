@@ -4,9 +4,9 @@ import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { fetchApi } from "@/lib/api";
 import { ArrowLeft, Server, AlertTriangle, Activity, Database, DollarSign, Layers } from "lucide-react";
-import ResourceRiskSummaryCards from "@/components/resource/ResourceRiskSummaryCards";
-import ResourceRiskList from "@/components/resource/ResourceRiskList";
-import ResourceLogPreview from "@/components/resource/ResourceLogPreview";
+import ResourceRiskSummaryCards from "@/components/resource-intelligence/ResourceRiskSummaryCards";
+import ResourceRiskList from "@/components/resource-intelligence/ResourceRiskList";
+import ResourceLogPreview from "@/components/resource-intelligence/ResourceLogPreview";
 
 export default function AwsResourceDetailPage() {
   const params = useParams();
