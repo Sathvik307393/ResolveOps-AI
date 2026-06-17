@@ -55,7 +55,7 @@ export default function AksWorkloadSummary({ k8sData, clusterId }) {
                             <li>Click <span className="text-white">Add role assignment</span></li>
                             <li>Select: <span className="bg-rose-500/20 px-2 py-0.5 rounded text-white font-mono text-xs">Azure Kubernetes Service Cluster User Role</span></li>
                             <li>Assign access to: <span className="text-white">User, group, or service principal</span></li>
-                            <li>Select the <span className="text-white">NexusAI App Registration / Service Principal</span></li>
+                            <li>Select the <span className="text-white">ResolveOps AI App Registration / Service Principal</span></li>
                             <li>Save and wait a few minutes for RBAC propagation</li>
                             <li>Click Retry AKS Connection below</li>
                         </ol>
@@ -64,7 +64,7 @@ export default function AksWorkloadSummary({ k8sData, clusterId }) {
                         <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2">CLI Command</h4>
                         <pre className="bg-black/50 p-4 rounded-lg text-xs font-mono text-slate-300 overflow-x-auto border border-rose-500/20 whitespace-pre">
 {`az role assignment create \\
-  --assignee <NEXUSAI_SERVICE_PRINCIPAL_CLIENT_ID_OR_OBJECT_ID> \\
+  --assignee <RESOLVEOPS_SERVICE_PRINCIPAL_CLIENT_ID_OR_OBJECT_ID> \\
   --role "Azure Kubernetes Service Cluster User Role" \\
   --scope <AKS_RESOURCE_ID>`}
                         </pre>

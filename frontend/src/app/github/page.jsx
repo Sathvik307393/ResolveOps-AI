@@ -313,7 +313,7 @@ export default function GitHubDeployments() {
                 <div className="p-2 bg-purple-500/20 rounded-lg">
                   <Bot className="text-purple-400" size={20} />
                 </div>
-                <h3 className="font-bold text-white tracking-wide text-lg">Nexus AI RCA Report</h3>
+                <h3 className="font-bold text-white tracking-wide text-lg">ResolveOps AI RCA Report</h3>
               </div>
               <button
                 onClick={() => setDiagnoseModal({ isOpen: false })}

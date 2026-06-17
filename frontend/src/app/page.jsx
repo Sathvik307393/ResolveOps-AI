@@ -69,7 +69,7 @@ export default function GlobalDashboard() {
             <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-50 rounded-full animate-pulse"></div>
             <Activity className="animate-spin text-indigo-400 w-12 h-12 relative z-10" />
           </div>
-          <p className="text-slate-400 font-mono text-sm tracking-widest uppercase">Initializing NexusAI Core...</p>
+          <p className="text-slate-400 font-mono text-sm tracking-widest uppercase">Initializing ResolveOps AI Core...</p>
         </div>
       </DashboardLayout>
     );
@@ -96,10 +96,10 @@ export default function GlobalDashboard() {
                 <Zap size={12} className="text-indigo-400" /> System Online
               </div>
               <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 mb-4 tracking-tight">
-                NexusAI Command Center
+                ResolveOps AI Command Center
               </h1>
               <p className="text-lg text-slate-400 max-w-2xl leading-relaxed">
-                Autonomous multi-cloud operations, predictive analytics, and self-healing pipelines unified in a single intelligence hub.
+                Monitor Kubernetes, Azure, AWS, GitHub Actions, Docker containers, costs, risks, and incidents from one AI-powered SRE platform.
               </p>
             </div>
             <button 

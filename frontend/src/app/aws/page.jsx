@@ -192,7 +192,7 @@ function AwsSetupGuide({ onConnect }) {
                   <label className="block text-sm font-medium text-slate-300 mb-1">IAM Role ARN</label>
                   <input
                     type="text"
-                    placeholder="arn:aws:iam::123456789012:role/NexusAIDiscoveryRole"
+                    placeholder="arn:aws:iam::123456789012:role/ResolveOpsAIDiscoveryRole"
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500 font-mono text-sm"
                     value={formData.role_arn}
                     onChange={e => setFormData({...formData, role_arn: e.target.value})}
@@ -309,7 +309,7 @@ function AwsSetupGuide({ onConnect }) {
             Security Note
           </h4>
           <p className="text-sm text-amber-500/80 leading-relaxed">
-            Nexus AI never stores your Secret Access Keys. We securely validate the connection and immediately discard the key. If you use a Role ARN, we rely on secure AssumeRole delegation.
+            ResolveOps AI never stores your Secret Access Keys. We securely validate the connection and immediately discard the key. If you use a Role ARN, we rely on secure AssumeRole delegation.
           </p>
         </div>
       </div>

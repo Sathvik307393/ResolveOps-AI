@@ -148,8 +148,8 @@ export default function AICopilot() {
     const firstName = name?.split(" ")[0] || "";
     const greeting = getGreeting();
     return firstName
-      ? `${greeting}, ${firstName}! 👋 I am the **Nexus AI Copilot**. I have full visibility into your active incidents, pipelines, and cloud resources. How can I assist you today?`
-      : `${greeting}! 👋 I am the **Nexus AI Copilot**. How can I assist you today?`;
+      ? `${greeting}, ${firstName}! 👋 I am the **ResolveOps AI Copilot**. I have full visibility into your active incidents, pipelines, and cloud resources. How can I assist you today?`
+      : `${greeting}! 👋 I am the **ResolveOps AI Copilot**. How can I assist you today?`;
   }, []);
 
   const loadSession = useCallback(async (sid, name) => {
