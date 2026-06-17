@@ -81,6 +81,8 @@ class AWSResourceDiscoveryService:
 
     def _scan_ec2(self, region: str) -> List[Dict]:
         resources = []
+        logger.info(f"scanning region: {region}")
+        logger.info("EC2 describe_instances started")
         try:
             ec2 = self._get_client('ec2', region)
             response = ec2.describe_instances()
@@ -108,8 +110,10 @@ class AWSResourceDiscoveryService:
                             "public_ip": instance.get('PublicIpAddress')
                         }
                     ))
+            logger.info(f"EC2 instances found count: {len(resources)}")
         except Exception as e:
             logger.error(f"Failed to scan EC2 instances in {region}: {e}")
+            logger.warning(f"scanner warnings: {e}")
         return resources
 
     def _scan_s3(self, region: str) -> List[Dict]:

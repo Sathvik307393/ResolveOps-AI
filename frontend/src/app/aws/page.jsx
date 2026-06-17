@@ -21,30 +21,48 @@ export default function AwsHubPage() {
   const [connectionDetails, setConnectionDetails] = useState(null);
   const [resources, setResources] = useState([]);
   const [summary, setSummary] = useState({});
+  const [warnings, setWarnings] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     fetchAwsStatus();
   }, []);
 
+  const fetchAwsResources = async () => {
+    try {
+      const res = await fetchApi("/api/v1/aws/resources");
+      if (res && res.resources) {
+        setResources(res.resources);
+        
+        // Compute summary
+        let ec2Count = 0, eksCount = 0, rdsCount = 0, s3Count = 0;
+        res.resources.forEach(r => {
+          if (r.resource_type.includes("EC2::Instance")) ec2Count++;
+          if (r.resource_type.includes("EKS::Cluster")) eksCount++;
+          if (r.resource_type.includes("RDS::DBInstance")) rdsCount++;
+          if (r.resource_type.includes("S3::Bucket")) s3Count++;
+        });
+        
+        setSummary({
+          total: res.resources.length,
+          ec2: ec2Count,
+          eks: eksCount,
+          rds: rdsCount,
+          s3: s3Count,
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch resources", err);
+    }
+  };
+
   const fetchAwsStatus = async () => {
     try {
-      // In reality, this goes through API Gateway to aws-intelligence-service
       const res = await fetchApi("/api/v1/aws/status");
       if (res && res.status === "connected") {
         setStatus("connected");
         setConnectionDetails(res.connection_details || {});
-        // Mock fetch resources for now
-        setResources([]);
-        setSummary({
-          total: 0,
-          vpcs: 0,
-          ec2: 0,
-          eks: 0,
-          rds: 0,
-          s3: 0,
-          critical_risks: 0
-        });
+        await fetchAwsResources();
       } else {
         setStatus("disconnected");
       }
@@ -56,8 +74,32 @@ export default function AwsHubPage() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await fetchAwsStatus();
-    setIsRefreshing(false);
+    try {
+      const authData = {
+        auth_method: connectionDetails?.auth_method || "environment",
+        connection_name: connectionDetails?.name || "AWS Connection"
+      };
+      
+      const syncRes = await fetchApi("/api/v1/aws/resources/sync", {
+        method: "POST",
+        body: JSON.stringify(authData)
+      });
+      
+      if (syncRes) {
+        if (syncRes.warnings && syncRes.warnings.length > 0) {
+          setWarnings(syncRes.warnings);
+        } else {
+          setWarnings([]);
+        }
+        if (syncRes.resources || syncRes.status === "success" || syncRes.status === "partial_success") {
+          await fetchAwsResources();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to sync resources", err);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   if (status === "loading") {
@@ -102,6 +144,19 @@ export default function AwsHubPage() {
         <AwsSetupGuide onConnect={fetchAwsStatus} />
       ) : (
         <div className="space-y-8">
+          {warnings.length > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex gap-3">
+              <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-medium text-amber-400">Scan completed with warnings</h4>
+                <ul className="mt-1 space-y-1">
+                  {warnings.map((w, i) => (
+                    <li key={i} className="text-sm text-slate-300">• {w.message}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
           <AwsConnectionCard details={connectionDetails} />
           <AwsSummaryGrid summary={summary} />
           <AwsResourceInventory resources={resources} />
@@ -422,7 +477,11 @@ function AwsResourceInventory({ resources }) {
               <th className="p-4 font-medium">Type</th>
               <th className="p-4 font-medium">Region</th>
               <th className="p-4 font-medium">Status</th>
-              <th className="p-4 font-medium">Risk Level</th>
+              <th className="p-4 font-medium">Instance Type / SKU</th>
+              <th className="p-4 font-medium">Public IP</th>
+              <th className="p-4 font-medium">Private IP</th>
+              <th className="p-4 font-medium">Risk</th>
+              <th className="p-4 font-medium">Cost status</th>
               <th className="p-4 font-medium">Actions</th>
             </tr>
           </thead>
@@ -448,26 +507,44 @@ function AwsResourceInventory({ resources }) {
                     {res.status}
                   </span>
                 </td>
+                <td className="p-4 text-slate-300 text-xs">
+                  {res.metadata?.instance_type || res.metadata?.instance_class || "-"}
+                </td>
+                <td className="p-4 text-slate-300 text-xs font-mono">
+                  {res.metadata?.public_ip || "-"}
+                </td>
+                <td className="p-4 text-slate-300 text-xs font-mono">
+                  {res.metadata?.private_ip || "-"}
+                </td>
                 <td className="p-4">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    res.risk_level === 'critical' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
-                    res.risk_level === 'high' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
-                    res.risk_level === 'medium' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                    'bg-slate-800 text-slate-400 border border-slate-700'
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
+                    res.risk_level === 'critical' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                    res.risk_level === 'high' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
+                    res.risk_level === 'medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                    'bg-slate-800 text-slate-400 border-slate-700'
                   }`}>
-                    {res.risk_level.toUpperCase()}
+                    {res.risk_level}
                   </span>
                 </td>
                 <td className="p-4">
-                  <a href={`/aws/resource/${encodeURIComponent(res.id)}`} className="text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1">
-                    Details <ArrowRight className="w-4 h-4" />
+                  <span className={`text-xs ${
+                    res.cost_status === 'available' ? 'text-emerald-400' :
+                    res.cost_status === 'permission_required' ? 'text-amber-400' :
+                    'text-slate-400'
+                  }`}>
+                    {res.cost_status === 'permission_required' ? 'Permissions Required' : res.cost_status || 'Unknown'}
+                  </span>
+                </td>
+                <td className="p-4">
+                  <a href={`/aws/resource/${encodeURIComponent(res.id)}`} className="text-indigo-400 hover:text-indigo-300 text-sm flex items-center gap-1 group">
+                    View <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
                   </a>
                 </td>
               </tr>
             ))}
             {filteredResources.length === 0 && (
               <tr>
-                <td colSpan="6" className="p-8 text-center text-slate-400">
+                <td colSpan="10" className="p-8 text-center text-slate-400">
                   No resources match your search filters.
                 </td>
               </tr>

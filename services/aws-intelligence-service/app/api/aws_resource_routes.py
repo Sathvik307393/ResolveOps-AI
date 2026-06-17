@@ -47,10 +47,33 @@ def sync_resources(
         # Simple cache logic
         _db_cache["resources"] = resources
         
+        ec2 = sum(1 for r in resources if "EC2" in r.get("resource_type", ""))
+        rds = sum(1 for r in resources if "RDS" in r.get("resource_type", ""))
+        eks = sum(1 for r in resources if "EKS" in r.get("resource_type", ""))
+        s3 = sum(1 for r in resources if "S3" in r.get("resource_type", ""))
+        
+        # Check if Cost Explorer failed
+        warnings = []
+        if any(r.get("cost_status") == "permission_required" for r in resources):
+            warnings.append({
+                "service": "cost-explorer",
+                "message": "Cost Explorer permission required. Cost data unavailable."
+            })
+            
+        status_str = "partial_success" if warnings else "success"
+        
         return {
-            "status": "success",
-            "message": f"Successfully synced {len(resources)} resources across {len(regions)} regions.",
-            "count": len(resources),
+            "status": status_str,
+            "account_id": service.account_id if hasattr(service, "account_id") else "",
+            "regions_scanned": regions,
+            "resources_count": len(resources),
+            "summary": {
+                "ec2_instances": ec2,
+                "rds_databases": rds,
+                "eks_clusters": eks,
+                "s3_buckets": s3
+            },
+            "warnings": warnings,
             "resources": resources
         }
     except Exception as e:
