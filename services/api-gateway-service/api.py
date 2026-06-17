@@ -99,11 +99,23 @@ def request_otp(req: OTPRequest):
     }
 
     # Send OTP email
-    notifications.send_otp_email(
+    success = notifications.send_otp_email(
         email=req.email,
         full_name=req.full_name,
         otp_code=otp_code
     )
+    
+    if not success:
+        # Remove from store since it failed
+        del otp_store[req.email]
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "status": "email_send_failed",
+                "message": "Failed to send OTP email. Please check SMTP sender verification."
+            }
+        )
+
     return {"message": f"OTP sent to {req.email}. Please check your inbox."}
 
 # --- Auth Endpoints (DynamoDB) ---

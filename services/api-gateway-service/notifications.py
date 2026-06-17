@@ -15,7 +15,23 @@ SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "").strip()
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").strip()
-SENDER_EMAIL = os.getenv("NEXUS_SENDER_EMAIL", SMTP_USER).strip()
+
+SENDER_EMAIL = (
+    os.getenv("EMAIL_FROM") or
+    os.getenv("SMTP_FROM_EMAIL") or
+    os.getenv("SENDER_EMAIL") or
+    os.getenv("RESOLVEOPS_SENDER_EMAIL") or
+    os.getenv("NEXUS_SENDER_EMAIL") or
+    SMTP_USER
+).strip()
+
+logger.info("=== SMTP Configuration ===")
+logger.info(f"SMTP Host loaded: {SMTP_HOST}")
+logger.info(f"SMTP Port loaded: {SMTP_PORT}")
+logger.info(f"SMTP Username loaded: {SMTP_USER}")
+logger.info(f"Sender Email loaded: {SENDER_EMAIL}")
+logger.info(f"SMTP Password present: {bool(SMTP_PASSWORD)}")
+logger.info("==========================")
 
 def _send_smtp(recipient: str, subject: str, html_body: str) -> bool:
     """Send an email via SMTP (Gmail / any SMTP provider)."""
