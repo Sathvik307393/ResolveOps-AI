@@ -141,23 +141,30 @@ def register_user(user: UserAuth):
 
         users_table = get_users_table()
         
-        # Check if user exists
+        # Check if user exists but preserve integrations if they are re-registering after auth cleanup
         response = users_table.get_item(Key={'email': user.email})
-        if 'Item' in response:
+        existing_item = response.get('Item')
+        
+        if existing_item and existing_item.get('hashed_password'):
             raise HTTPException(status_code=400, detail="Email already registered")
+        
+        integrations = existing_item.get('integrations') if existing_item else None
         
         hashed_password = get_password_hash(user.password)
         user_id = str(uuid.uuid4())
 
-        # Save user with full_name
-        users_table.put_item(Item={
+        # Save user with full_name and preserve integrations
+        item_to_put = {
             'email': user.email,
             'user_id': user_id,
             'full_name': full_name,
             'hashed_password': hashed_password,
             'created_at': datetime.datetime.utcnow().isoformat()
-        })
-        
+        }
+        if integrations:
+            item_to_put['integrations'] = integrations
+            
+        users_table.put_item(Item=item_to_put)
         # Generate default API key
         keys_table = get_keys_table()
         default_key = "nx_live_" + str(uuid.uuid4()).replace("-", "")
@@ -186,7 +193,9 @@ def login_user(user: UserAuth):
             raise HTTPException(status_code=401, detail="Invalid credentials")
             
         db_user = response['Item']
-        if not verify_password(user.password, db_user['hashed_password']):
+        hashed_password = db_user.get('hashed_password')
+        
+        if not hashed_password or not verify_password(user.password, hashed_password):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         
         token = jwt.encode({
