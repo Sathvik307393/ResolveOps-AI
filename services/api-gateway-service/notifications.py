@@ -32,7 +32,7 @@ def _send_smtp(recipient: str, subject: str, html_body: str) -> bool:
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = f"Nexus AI <{SENDER_EMAIL}>"
+        msg["From"] = f"ResolveOps Support <{SENDER_EMAIL}>"
         msg["To"] = recipient
         msg.attach(MIMEText(html_body, "html"))
 
