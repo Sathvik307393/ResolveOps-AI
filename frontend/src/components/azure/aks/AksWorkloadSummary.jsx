@@ -36,14 +36,59 @@ export default function AksWorkloadSummary({ k8sData, clusterId }) {
           <div className="p-3 bg-rose-500/20 rounded-full text-rose-400">
             <XCircle size={24} />
           </div>
-          <div>
-            <h3 className="text-xl font-bold text-white mb-2">Kubernetes Connection Failed</h3>
+          <div className="w-full">
+            <h3 className="text-xl font-bold text-white mb-2">{k8sData?.title || "Kubernetes Connection Failed"}</h3>
             <p className="text-sm text-slate-300 mb-4">{k8sData?.message || "Failed to establish connection to the Kubernetes API server."}</p>
-            <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-lg">
-              <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2">Recommended Action</h4>
-              <p className="text-sm text-rose-300/80">{k8sData?.recommended_action || "Check cluster permissions and network connectivity."}</p>
-            </div>
-            <p className="text-xs text-slate-500 font-mono mt-4">Reason: {k8sData?.reason || "unknown"}</p>
+            
+            {k8sData?.reason === "permission_missing" || k8sData?.status === "permission_missing" ? (
+                <div className="bg-rose-500/10 border border-rose-500/20 p-5 rounded-lg mt-4 space-y-6">
+                    <div>
+                        <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-1">Required Role</h4>
+                        <p className="text-sm font-semibold text-white">{k8sData?.required_role || "Azure Kubernetes Service Cluster User Role"}</p>
+                    </div>
+                    <div>
+                        <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-3">Troubleshooting Steps</h4>
+                        <ol className="list-decimal pl-5 space-y-2 text-sm text-rose-300/90 marker:text-rose-500 font-medium">
+                            <li>Go to <span className="text-white">Azure Portal</span></li>
+                            <li>Open the <span className="text-white">AKS cluster</span></li>
+                            <li>Go to <span className="text-white">Access control (IAM)</span></li>
+                            <li>Click <span className="text-white">Add role assignment</span></li>
+                            <li>Select: <span className="bg-rose-500/20 px-2 py-0.5 rounded text-white font-mono text-xs">Azure Kubernetes Service Cluster User Role</span></li>
+                            <li>Assign access to: <span className="text-white">User, group, or service principal</span></li>
+                            <li>Select the <span className="text-white">NexusAI App Registration / Service Principal</span></li>
+                            <li>Save and wait a few minutes for RBAC propagation</li>
+                            <li>Click Retry AKS Connection below</li>
+                        </ol>
+                    </div>
+                    <div>
+                        <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2">CLI Command</h4>
+                        <pre className="bg-black/50 p-4 rounded-lg text-xs font-mono text-slate-300 overflow-x-auto border border-rose-500/20 whitespace-pre">
+{`az role assignment create \\
+  --assignee <NEXUSAI_SERVICE_PRINCIPAL_CLIENT_ID_OR_OBJECT_ID> \\
+  --role "Azure Kubernetes Service Cluster User Role" \\
+  --scope <AKS_RESOURCE_ID>`}
+                        </pre>
+                    </div>
+                    <div className="pt-2">
+                         <button onClick={() => window.location.reload()} className="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-2 shadow-lg shadow-rose-500/20">
+                             <Activity size={16} /> Retry AKS Connection
+                         </button>
+                    </div>
+                </div>
+            ) : (
+                <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-lg mt-4 space-y-4">
+                  <div>
+                    <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2">Recommended Action</h4>
+                    <p className="text-sm text-rose-300/80">{k8sData?.recommended_action || "Check cluster permissions and network connectivity."}</p>
+                  </div>
+                  <div className="pt-2">
+                       <button onClick={() => window.location.reload()} className="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-2 shadow-lg shadow-rose-500/20">
+                           <Activity size={16} /> Retry AKS Connection
+                       </button>
+                  </div>
+                </div>
+            )}
+            <p className="text-xs text-slate-500 font-mono mt-4">Reason: {k8sData?.reason || k8sData?.status || "unknown"}</p>
           </div>
         </div>
       </div>

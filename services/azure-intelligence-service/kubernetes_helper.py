@@ -1,7 +1,15 @@
 import yaml
+import os
+import json
 from kubernetes import client, config
+from kubernetes.client.rest import ApiException
 from azure.mgmt.containerservice import ContainerServiceClient
 from azure.core.exceptions import HttpResponseError
+
+class AKSPermissionError(Exception):
+    def __init__(self, message, error_data):
+        super().__init__(message)
+        self.error_data = error_data
 
 def fetch_aks_kubeconfig(credential, subscription_id, resource_group_name, cluster_name):
     containerservice_client = ContainerServiceClient(credential, subscription_id)
@@ -12,13 +20,25 @@ def fetch_aks_kubeconfig(credential, subscription_id, resource_group_name, clust
         return kubeconfig_bytes.decode('utf-8')
     except HttpResponseError as e:
         if e.status_code in [403, 401]:
-            # 2. Fallback to list_cluster_admin_credentials
-            try:
-                credentials = containerservice_client.managed_clusters.list_cluster_admin_credentials(resource_group_name, cluster_name)
-                kubeconfig_bytes = credentials.kubeconfigs[0].value
-                return kubeconfig_bytes.decode('utf-8')
-            except HttpResponseError as admin_e:
-                raise Exception("Service principal does not have permission to retrieve AKS kubeconfig. Assign the required AKS Cluster User/Admin credential role.")
+            # 2. Fallback to list_cluster_admin_credentials only if explicitly allowed
+            if os.environ.get("ALLOW_AKS_ADMIN_CREDENTIALS", "false").lower() == "true":
+                try:
+                    credentials = containerservice_client.managed_clusters.list_cluster_admin_credentials(resource_group_name, cluster_name)
+                    kubeconfig_bytes = credentials.kubeconfigs[0].value
+                    return kubeconfig_bytes.decode('utf-8')
+                except HttpResponseError:
+                    pass
+            
+            error_data = {
+                "status": "permission_missing",
+                "title": "Kubernetes Connection Failed",
+                "message": "Service principal does not have permission to retrieve AKS kubeconfig.",
+                "recommended_action": "Assign Azure Kubernetes Service Cluster User Role to the NexusAI service principal at the AKS cluster scope.",
+                "required_role": "Azure Kubernetes Service Cluster User Role",
+                "scope_recommendation": "Assign at AKS cluster scope first.",
+                "troubleshooting_steps": []
+            }
+            raise AKSPermissionError(error_data["message"], error_data)
         raise Exception(f"Failed to fetch kubeconfig: {e.message}")
 
 def get_kubernetes_workloads(kubeconfig_yaml):
@@ -47,8 +67,12 @@ def get_kubernetes_workloads(kubeconfig_yaml):
             ns_list = core_v1.list_namespace(timeout_seconds=5)
             data["namespaces"] = [ns.metadata.name for ns in ns_list.items]
             data["summary"]["namespaces"] = len(data["namespaces"])
+        except ApiException as e:
+            if e.status in [401, 403]:
+                return _generate_k8s_error("rbac_denied", "Kubeconfig was retrieved, but Kubernetes RBAC denied access to workloads.", "Create a Kubernetes RoleBinding or ClusterRoleBinding that allows the NexusAI identity to read pods, nodes, deployments, services, and events.")
+            return _generate_k8s_error("api_unreachable", "AKS API server unreachable. This may be a private AKS cluster or network connectivity issue.", "Run NexusAI inside Azure VNet/AKS, configure VPN/private connectivity, or use an in-cluster agent.")
         except Exception as e:
-            return _generate_k8s_error("api_unreachable", "Failed to reach the Kubernetes API server.", "AKS API server is protected by authorized IP ranges. Add the NexusAI backend outbound IP. Or this AKS cluster appears to be private. NexusAI backend must run inside the Azure VNet, use VPN/private connectivity, or use an in-cluster agent.")
+            return _generate_k8s_error("api_unreachable", "AKS API server unreachable. This may be a private AKS cluster or network connectivity issue.", "Run NexusAI inside Azure VNet/AKS, configure VPN/private connectivity, or use an in-cluster agent.")
             
         # Nodes
         try:

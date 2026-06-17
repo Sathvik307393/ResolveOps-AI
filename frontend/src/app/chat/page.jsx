@@ -356,11 +356,10 @@ export default function AICopilot() {
                     <Bot size={15} />
                   </div>
                 )}
-                <div className={`max-w-[78%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                  msg.role === "user"
+                <div className={`max-w-[78%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${msg.role === "user"
                     ? "bg-indigo-600/25 border border-indigo-500/30 text-indigo-100 whitespace-pre-wrap rounded-tr-sm"
                     : "bg-white/4 border border-white/8 text-slate-300 shadow-sm rounded-tl-sm"
-                }`}>
+                  }`}>
                   {msg.role === "user" ? msg.content : (
                     <div className="prose-sm max-w-none">
                       <ReactMarkdown
@@ -441,8 +440,8 @@ export default function AICopilot() {
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
                 placeholder={
                   voiceSending ? "Transcribing voice..."
-                  : isRecording ? "Recording… press stop when done."
-                  : "Ask anything about incidents, pipelines, AKS, costs, architecture…"
+                    : isRecording ? "Recording… press stop when done."
+                      : "Ask anything about incidents, pipelines, AKS, costs, architecture…"
                 }
                 disabled={isRecording || voiceSending}
                 className="flex-1 bg-transparent text-white text-sm focus:outline-none placeholder-slate-600 py-1"
