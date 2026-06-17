@@ -49,9 +49,36 @@ def connect_aws_account(payload: AWSConnectRequest = Body(...)):
 def get_aws_status():
     """
     Returns the current connection status of the AWS intelligence module.
+    Automatically resolves credentials from environment variables or EC2 metadata.
     """
-    # In a full implementation, this would check the DB for saved credentials
-    return {
-        "status": "disconnected",
-        "message": "No active AWS connection found."
-    }
+    import boto3
+    import os
+    from botocore.exceptions import ClientError, NoCredentialsError
+    
+    try:
+        region = os.getenv("AWS_DEFAULT_REGION", os.getenv("AWS_REGION", "us-east-1"))
+        sts = boto3.client('sts', region_name=region)
+        identity = sts.get_caller_identity()
+        
+        return {
+            "status": "connected",
+            "message": "AWS connection validated successfully.",
+            "connection_details": {
+                "name": "Auto-Discovered AWS Environment",
+                "account_id": identity.get("Account"),
+                "arn": identity.get("Arn"),
+                "auth_method": "environment",
+                "default_region": region,
+                "enabled_regions": os.getenv("AWS_ENABLED_REGIONS", region).split(",")
+            }
+        }
+    except (ClientError, NoCredentialsError) as e:
+        return {
+            "status": "disconnected",
+            "message": f"No active AWS connection found. Details: {str(e)}"
+        }
+    except Exception as e:
+        return {
+            "status": "disconnected",
+            "message": f"Unexpected error checking AWS status: {str(e)}"
+        }

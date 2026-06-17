@@ -34,20 +34,27 @@ def sync_resources(
     elif auth_method == "role_arn":
         # Role assume logic would go here to generate temp credentials
         pass
+    elif auth_method == "environment":
+        # Leave auth_kwargs empty to use boto3 default resolution (.env or EC2 role)
+        auth_kwargs = {}
     else:
         raise HTTPException(status_code=400, detail="Invalid auth method")
 
-    service = AWSResourceDiscoveryService(auth_kwargs)
-    resources = service.scan_regions(regions)
-    
-    # Simple cache logic
-    _db_cache["resources"] = resources
-    
-    return {
-        "message": f"Successfully synced {len(resources)} resources across {len(regions)} regions.",
-        "count": len(resources),
-        "resources": resources
-    }
+    try:
+        service = AWSResourceDiscoveryService(auth_kwargs)
+        resources = service.scan_regions(regions)
+        
+        # Simple cache logic
+        _db_cache["resources"] = resources
+        
+        return {
+            "status": "success",
+            "message": f"Successfully synced {len(resources)} resources across {len(regions)} regions.",
+            "count": len(resources),
+            "resources": resources
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to sync AWS resources: {str(e)}")
 
 @router.get("")
 def get_resources():
@@ -93,6 +100,22 @@ def get_resource_logs(resource_id: str):
     service = AWSCloudWatchService({})
     logs = service.fetch_recent_logs(resource_id, resource.get("region", "us-east-1"))
     return {"logs": logs}
+
+@router.get("/{resource_id:path}/metrics")
+def get_resource_metrics(resource_id: str):
+    resources = _db_cache.get("resources", [])
+    resource = next((r for r in resources if r["id"] == resource_id), None)
+    
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+        
+    service = AWSCloudWatchService({})
+    metrics = service.fetch_metrics(
+        resource_id, 
+        resource.get("resource_type", ""),
+        resource.get("region", "us-east-1")
+    )
+    return {"metrics": metrics}
 
 @router.get("/{resource_id:path}/workloads")
 def get_eks_workloads(resource_id: str):

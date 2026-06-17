@@ -66,13 +66,15 @@ class AWSCostService:
             result['actual_cost']['status'] = "available"
             result['actual_cost']['month_to_date'] = round(total_cost, 2)
 
-        except boto3.exceptions.botocore.exceptions.ClientError as e:
-            error_code = e.response.get('Error', {}).get('Code', '')
-            if error_code == 'AccessDeniedException':
-                result['actual_cost']['status'] = "permission_required"
-                result['actual_cost']['message'] = "Cost unavailable — AWS Cost Explorer permissions required."
         except Exception as e:
-            logger.error(f"Failed to fetch cost for {resource_arn}: {e}")
+            from botocore.exceptions import ClientError
+            if isinstance(e, ClientError):
+                error_code = e.response.get('Error', {}).get('Code', '')
+                if error_code == 'AccessDeniedException':
+                    result['actual_cost']['status'] = "permission_required"
+                    result['actual_cost']['message'] = "Cost unavailable — AWS Cost Explorer permissions required."
+            else:
+                logger.error(f"Failed to fetch cost for {resource_arn}: {e}")
 
         # In a real scenario, we'd query the AWS Pricing API to populate 'estimated_running_price'
         # For this prototype we will leave it as unavailable to avoid hardcoded arbitrary numbers.

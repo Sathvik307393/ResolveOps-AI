@@ -24,18 +24,10 @@ def generate_aws_rca(resource_id: str):
     # For prototyping, we simulate the Bedrock API call
     
     ai_provider = os.getenv("AI_PROVIDER", "bedrock")
-    if ai_provider != "bedrock":
-        raise HTTPException(status_code=400, detail="Amazon Bedrock is not configured for AI RCA.")
-        
+    
+    # Due to current Bedrock payment/model access issues, we return a graceful degradation message
     return {
-        "status": "success",
-        "rca_report": {
-            "root_cause": "The RDS instance is publicly accessible due to misconfigured security groups.",
-            "impact": "High. Potential data exfiltration risk.",
-            "resolution_steps": [
-                "Navigate to RDS Console.",
-                "Modify the instance to set 'Publicly Accessible' to False.",
-                "Update the attached VPC Security Group to restrict inbound rules on port 3306."
-            ]
-        }
+        "rca_status": "ai_unavailable",
+        "provider": "bedrock",
+        "message": "AI RCA is unavailable because Amazon Bedrock model access or billing is not configured. AWS discovery and metrics are still available."
     }
