@@ -43,48 +43,49 @@ export default function AwsResourceDetailPage() {
       const costData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/cost`).catch((e) => ({
         status: "error", message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load cost data."
       }));
-      setCost(costData);
+      const safeCostData = costData && typeof costData === "object" ? costData : { status: "unavailable", message: "Cost data unavailable" };
+      setCost(safeCostData);
 
       const risksData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/risks`).catch((e) => ({
         status: "error", risks: [], message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load risks."
       }));
-      setRisks(risksData.risks || []);
+      setRisks(Array.isArray(risksData?.risks) ? risksData.risks : []);
 
       const logsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/logs`).catch((e) => ({
         status: "error", logs: [], message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load logs."
       }));
-      setLogs(logsData.logs || []);
+      setLogs(Array.isArray(logsData?.logs) ? logsData.logs : []);
       setLogsStatus({
-          available: logsData.logs_available || false,
-          message: logsData.message || (logsData.status === "error" ? logsData.message : ""),
-          warnings: logsData.warnings || []
+          available: logsData?.logs_available || false,
+          message: logsData?.message || (logsData?.status === "error" ? logsData.message : ""),
+          warnings: Array.isArray(logsData?.warnings) ? logsData.warnings : []
       });
 
       const metricsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/metrics`).catch((e) => ({
         status: "error", metrics: null, message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load metrics."
       }));
-      setMetrics(metricsData.metrics || null);
+      setMetrics(metricsData?.metrics && typeof metricsData.metrics === "object" ? metricsData.metrics : null);
 
       const eventsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/events`).catch((e) => ({
         status: "error", events: [], message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load events."
       }));
-      setEvents(eventsData.events || []);
+      setEvents(Array.isArray(eventsData?.events) ? eventsData.events : []);
 
       const relsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/relationships`).catch((e) => ({
         status: "error", relationships: [], message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load relationships."
       }));
-      setRelationships(relsData.relationships || []);
+      setRelationships(Array.isArray(relsData?.relationships) ? relsData.relationships : []);
 
       const subData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/subresources`).catch((e) => ({
         status: "error", subresources: null, message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load subresources."
       }));
-      setSubresources(subData);
+      setSubresources(subData && typeof subData === "object" ? subData : { subresources: {} });
 
       if (resData?.resource_type?.includes("EC2")) {
           const runData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/runtime`).catch((e) => ({
             status: "error", message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load runtime."
           }));
-          setRuntime(runData);
+          setRuntime(runData && typeof runData === "object" ? runData : { status: "unavailable", message: "Runtime unavailable" });
       }
 
 
@@ -287,7 +288,7 @@ export default function AwsResourceDetailPage() {
                       {cost.estimated_running_price?.status === "available" ? `$${cost.estimated_running_price.monthly}` : "Unavailable"}
                     </p>
                     <p className="text-xs text-slate-500 mt-1">Confidence: {cost.estimated_running_price?.confidence}</p>
-                    {cost.estimated_running_price?.warnings && cost.estimated_running_price.warnings.map((w, i) => (
+                    {Array.isArray(cost.estimated_running_price?.warnings) && cost.estimated_running_price.warnings.map((w, i) => (
                        <p key={i} className="text-xs text-amber-400 mt-1">{w}</p>
                     ))}
                   </div>
@@ -470,7 +471,7 @@ function AwsResourceLogsAndEvents({ logs, logsStatus, metrics, events, resource 
             {Object.entries(metrics).slice(0, 4).map(([k, v], i) => (
               <div key={i} className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 text-center">
                 <p className="text-xs text-slate-400 mb-1 truncate" title={k}>{k}</p>
-                <p className="text-lg font-bold text-slate-200">{typeof v === 'number' ? v.toFixed(2) : v}</p>
+                <p className="text-lg font-bold text-slate-200">{typeof v === 'number' ? v.toFixed(2) : (typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v))}</p>
               </div>
             ))}
           </div>
@@ -537,7 +538,7 @@ function AwsResourceLogsAndEvents({ logs, logsStatus, metrics, events, resource 
 function AwsSubResources({ subresources, resource }) {
   if (!subresources || Object.keys(subresources).length === 0) return null;
   
-  const hasWarnings = subresources.status === "partial_success" && subresources.warnings && subresources.warnings.length > 0;
+  const hasWarnings = subresources.status === "partial_success" && Array.isArray(subresources.warnings) && subresources.warnings.length > 0;
 
   return (
     <div className="glass-panel p-6 rounded-xl border border-slate-700/50">
@@ -573,7 +574,7 @@ function AwsSubResources({ subresources, resource }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {val.map((item, idx) => (
                     <div key={idx} className="p-3 bg-slate-800/50 border border-slate-700 rounded-md text-xs">
-                      {typeof item === 'object' ? (
+                      {typeof item === 'object' && item !== null ? (
                         Object.entries(item).map(([k, v]) => (
                            <div key={k} className="flex justify-between mb-1 last:mb-0">
                              <span className="text-slate-500 capitalize">{k.replace(/_/g, ' ')}:</span>
@@ -602,8 +603,8 @@ function AwsSubResources({ subresources, resource }) {
 function AwsRuntime({ runtime }) {
   if (!runtime) return null;
   
-  const isError = runtime.status === "error" || runtime.status === "permission_required";
-  const hasContainers = runtime.runtime?.containers && runtime.runtime.containers.length > 0;
+  const isError = runtime.status === "error" || runtime.status === "permission_required" || runtime.status === "ssm_not_configured" || runtime.status === "docker_not_installed";
+  const hasContainers = Array.isArray(runtime.runtime?.containers) && runtime.runtime.containers.length > 0;
   const rawOutput = runtime.runtime?.raw_output;
 
   return (
