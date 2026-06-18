@@ -96,7 +96,18 @@ export default function IntegrationsManager() {
       setGithubEmail("");
       setGithubToken("");
     } catch (err) {
-      alert(err.message || "Failed to update integration connection");
+      const message =
+        err?.message ||
+        err?.detail ||
+        err?.error ||
+        err?.status ||
+        (typeof err === "object" ? JSON.stringify(err) : String(err));
+        
+      if (process.env.NODE_ENV === "development") {
+        console.debug("Connection error:", err);
+      }
+      
+      alert(message || "Failed to update integration connection");
     }
   };
 
