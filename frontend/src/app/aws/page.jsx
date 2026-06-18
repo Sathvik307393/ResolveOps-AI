@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { fetchApi } from "@/lib/api";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 import {
   Cloud,
   Server,
@@ -35,9 +36,13 @@ export default function AwsHubPage() {
         setResources(res.resources);
         
         // Compute summary
-        let ec2Count = 0, eksCount = 0, rdsCount = 0, s3Count = 0;
+        let ec2Count = 0, ec2Running = 0, ec2Stopped = 0, eksCount = 0, rdsCount = 0, s3Count = 0;
         res.resources.forEach(r => {
-          if (r.resource_type.includes("EC2::Instance")) ec2Count++;
+          if (r.resource_type.includes("EC2::Instance")) {
+            ec2Count++;
+            if (r.status?.toLowerCase() === "running") ec2Running++;
+            if (r.status?.toLowerCase() === "stopped") ec2Stopped++;
+          }
           if (r.resource_type.includes("EKS::Cluster")) eksCount++;
           if (r.resource_type.includes("RDS::DBInstance")) rdsCount++;
           if (r.resource_type.includes("S3::Bucket")) s3Count++;
@@ -46,6 +51,8 @@ export default function AwsHubPage() {
         setSummary({
           total: res.resources.length,
           ec2: ec2Count,
+          ec2Running,
+          ec2Stopped,
           eks: eksCount,
           rds: rdsCount,
           s3: s3Count,
@@ -114,55 +121,57 @@ export default function AwsHubPage() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto animate-in fade-in duration-300">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-100 flex items-center gap-3">
-            <div className="p-2 bg-amber-500/10 rounded-lg">
-              <Cloud className="w-7 h-7 text-amber-500" />
-            </div>
-            AWS Intelligence Hub
-          </h1>
-          <p className="text-slate-400 mt-2">
-            Discover, analyze, and secure your Amazon Web Services infrastructure.
-          </p>
+    <DashboardLayout>
+      <div className="p-8 max-w-7xl mx-auto animate-in fade-in duration-300">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-100 flex items-center gap-3">
+              <div className="p-2 bg-amber-500/10 rounded-lg">
+                <Cloud className="w-7 h-7 text-amber-500" />
+              </div>
+              AWS Intelligence Hub
+            </h1>
+            <p className="text-slate-400 mt-2">
+              Discover, analyze, and secure your Amazon Web Services infrastructure.
+            </p>
+          </div>
+          
+          {status === "connected" && (
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              {isRefreshing ? "Syncing..." : "Sync Resources"}
+            </button>
+          )}
         </div>
-        
-        {status === "connected" && (
-          <button
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
-            {isRefreshing ? "Syncing..." : "Sync Resources"}
-          </button>
+
+        {status === "disconnected" ? (
+          <AwsSetupGuide onConnect={fetchAwsStatus} />
+        ) : (
+          <div className="space-y-8">
+            {warnings.length > 0 && (
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex gap-3">
+                <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-medium text-amber-400">Scan completed with warnings</h4>
+                  <ul className="mt-1 space-y-1">
+                    {warnings.map((w, i) => (
+                      <li key={i} className="text-sm text-slate-300">• {w.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+            <AwsConnectionCard details={connectionDetails} />
+            <AwsSummaryGrid summary={summary} />
+            <AwsResourceInventory resources={resources} />
+          </div>
         )}
       </div>
-
-      {status === "disconnected" ? (
-        <AwsSetupGuide onConnect={fetchAwsStatus} />
-      ) : (
-        <div className="space-y-8">
-          {warnings.length > 0 && (
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex gap-3">
-              <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-medium text-amber-400">Scan completed with warnings</h4>
-                <ul className="mt-1 space-y-1">
-                  {warnings.map((w, i) => (
-                    <li key={i} className="text-sm text-slate-300">• {w.message}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
-          <AwsConnectionCard details={connectionDetails} />
-          <AwsSummaryGrid summary={summary} />
-          <AwsResourceInventory resources={resources} />
-        </div>
-      )}
-    </div>
+    </DashboardLayout>
   );
 }
 
@@ -394,7 +403,7 @@ function AwsConnectionCard({ details }) {
 
 function AwsSummaryGrid({ summary }) {
   const cards = [
-    { label: "EC2 Instances", value: summary.ec2 || 0, icon: Server, color: "text-blue-400", bg: "bg-blue-400/10" },
+    { label: "EC2 Instances", value: summary.ec2 || 0, subValue: `${summary.ec2Running || 0} Running, ${summary.ec2Stopped || 0} Stopped`, icon: Server, color: "text-blue-400", bg: "bg-blue-400/10" },
     { label: "RDS Databases", value: summary.rds || 0, icon: Database, color: "text-indigo-400", bg: "bg-indigo-400/10" },
     { label: "EKS Clusters", value: summary.eks || 0, icon: Layers, color: "text-purple-400", bg: "bg-purple-400/10" },
     { label: "S3 Buckets", value: summary.s3 || 0, icon: HardDrive, color: "text-emerald-400", bg: "bg-emerald-400/10" }
@@ -410,6 +419,7 @@ function AwsSummaryGrid({ summary }) {
           <div>
             <p className="text-sm text-slate-400">{c.label}</p>
             <p className="text-2xl font-bold text-slate-100">{c.value}</p>
+            {c.subValue && <p className="text-[10px] text-slate-500 font-mono mt-0.5">{c.subValue}</p>}
           </div>
         </div>
       ))}

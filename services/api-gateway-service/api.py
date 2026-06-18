@@ -1844,5 +1844,238 @@ def refresh_azure_cost(current_user: dict = Depends(get_current_user)):
     clear_cost_cache()
     return {"message": "Cost cache cleared"}
 
+# --- AWS Proxy Routes ---
+import os
+import urllib.parse
+from fastapi import Request
+
+AWS_INTELLIGENCE_SERVICE_URL = os.getenv("AWS_INTELLIGENCE_SERVICE_URL", "http://aws-intelligence-service:8000")
+GITHUB_INTELLIGENCE_SERVICE_URL = os.getenv("GITHUB_INTELLIGENCE_SERVICE_URL", "http://github-intelligence-service:8000")
+
+@app.post("/api/v1/aws/connect")
+def aws_connect(req: Request, current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_email = current_user.get("email")
+        from database import get_user_integrations, update_user_integrations
+        import requests
+        
+        body = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/connect", json=req.json(), timeout=10)
+        if body.status_code != 200:
+            raise HTTPException(status_code=body.status_code, detail=body.json().get("detail", "AWS Connection Failed"))
+            
+        result = body.json()
+        
+        # Save credentials securely to DB
+        integrations = get_user_integrations(tenant_email)
+        if "aws" not in integrations:
+            integrations["aws"] = {}
+        integrations["aws"]["connected"] = True
+        integrations["aws"]["credentials"] = req.json() # Temporarily store securely in DynamoDB backend
+        update_user_integrations(tenant_email, integrations)
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/aws/status")
+def aws_status(current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_email = current_user.get("email")
+        from database import get_user_integrations
+        integrations = get_user_integrations(tenant_email)
+        
+        if integrations.get("aws", {}).get("connected"):
+            return {
+                "status": "connected",
+                "message": "AWS connection validated successfully.",
+                "connection_details": {
+                    "name": integrations["aws"]["credentials"].get("connection_name", "AWS Connection"),
+                    "account_id": "Protected",
+                    "auth_method": integrations["aws"]["credentials"].get("auth_method", "environment"),
+                    "default_region": integrations["aws"]["credentials"].get("default_region", "us-east-1"),
+                    "enabled_regions": [integrations["aws"]["credentials"].get("default_region", "us-east-1")]
+                }
+            }
+        return {"status": "disconnected"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/aws/resources/sync")
+def aws_resources_sync(req: Request, current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_email = current_user.get("email")
+        from database import get_user_integrations
+        import requests
+        
+        integrations = get_user_integrations(tenant_email)
+        creds = integrations.get("aws", {}).get("credentials", {})
+        
+        payload = {
+            "auth_method": creds.get("auth_method", "environment"),
+            "access_key_id": creds.get("access_key_id"),
+            "secret_access_key": creds.get("secret_access_key"),
+            "role_arn": creds.get("role_arn"),
+            "external_id": creds.get("external_id"),
+            "regions": creds.get("enabled_regions", [creds.get("default_region", "us-east-1")])
+        }
+        
+        res = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/sync", json=payload, timeout=60)
+        if res.status_code != 200:
+            raise HTTPException(status_code=res.status_code, detail=res.text)
+            
+        return res.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/aws/resources")
+def aws_resources(current_user: dict = Depends(get_current_user)):
+    import requests
+    res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources", timeout=10)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail="Failed to fetch resources")
+    return res.json()
+
+@app.get("/api/v1/aws/resources/{resource_id:path}")
+def aws_resource_details(resource_id: str, current_user: dict = Depends(get_current_user)):
+    import requests
+    # Find resource in the list to return details
+    res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources", timeout=10)
+    if res.status_code == 200:
+        resources = res.json().get("resources", [])
+        for r in resources:
+            if r["id"] == urllib.parse.unquote(resource_id):
+                return r
+    raise HTTPException(status_code=404, detail="Resource not found")
+
+@app.get("/api/v1/aws/resources/{resource_id:path}/cost")
+def aws_resource_cost(resource_id: str, current_user: dict = Depends(get_current_user)):
+    import requests
+    safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
+    res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/cost", timeout=10)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail="Failed to fetch cost")
+    return res.json()
+
+@app.get("/api/v1/aws/resources/{resource_id:path}/risks")
+def aws_resource_risks(resource_id: str, current_user: dict = Depends(get_current_user)):
+    import requests
+    safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
+    res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/risks", timeout=10)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail="Failed to fetch risks")
+    return res.json()
+
+@app.get("/api/v1/aws/resources/{resource_id:path}/logs")
+def aws_resource_logs(resource_id: str, current_user: dict = Depends(get_current_user)):
+    import requests
+    safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
+    res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/logs", timeout=10)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail="Failed to fetch logs")
+    return res.json()
+
+@app.get("/api/v1/aws/resources/{resource_id:path}/metrics")
+def aws_resource_metrics(resource_id: str, current_user: dict = Depends(get_current_user)):
+    import requests
+    safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
+    res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/metrics", timeout=10)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail="Failed to fetch metrics")
+    return res.json()
+
+@app.post("/api/v1/aws/resources/{resource_id:path}/rca")
+def aws_resource_rca(resource_id: str, req: Request, current_user: dict = Depends(get_current_user)):
+    import requests
+    safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
+    res = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/rca", json=req.json(), timeout=60)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail="Failed to fetch RCA")
+    return res.json()
+
+# --- GitHub Sync Routes ---
+def get_github_token_for_tenant(tenant_email: str) -> str:
+    integrations = get_user_integrations(tenant_email)
+    pat = integrations.get("github", {}).get("credentials", {}).get("github_token")
+    if not pat:
+        pat = os.getenv("GITHUB_PAT")
+    if not pat:
+        raise HTTPException(status_code=400, detail="GitHub PAT not configured")
+    return pat
+
+@app.get("/api/v1/github/status")
+def github_status_proxy(current_user: dict = Depends(get_current_user)):
+    import requests
+    pat = get_github_token_for_tenant(current_user.get("email"))
+    headers = {"X-GitHub-Token": pat}
+    res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/status", headers=headers, timeout=15)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail=res.text)
+    return res.json()
+
+@app.post("/api/v1/github/sync")
+def github_sync_proxy(current_user: dict = Depends(get_current_user)):
+    import requests
+    pat = get_github_token_for_tenant(current_user.get("email"))
+    headers = {"X-GitHub-Token": pat}
+    res = requests.post(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/sync", headers=headers, timeout=120)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail=res.text)
+    return res.json()
+
+@app.get("/api/v1/github/repos")
+def github_repos_proxy(current_user: dict = Depends(get_current_user)):
+    import requests
+    pat = get_github_token_for_tenant(current_user.get("email"))
+    headers = {"X-GitHub-Token": pat}
+    res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/repos", headers=headers, timeout=15)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail=res.text)
+    return res.json()
+
+@app.get("/api/v1/github/workflows")
+def github_workflows_proxy(current_user: dict = Depends(get_current_user)):
+    import requests
+    pat = get_github_token_for_tenant(current_user.get("email"))
+    headers = {"X-GitHub-Token": pat}
+    res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/workflows", headers=headers, timeout=15)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail=res.text)
+    return res.json()
+
+@app.get("/api/v1/github/runs")
+def github_runs_proxy(current_user: dict = Depends(get_current_user)):
+    import requests
+    pat = get_github_token_for_tenant(current_user.get("email"))
+    headers = {"X-GitHub-Token": pat}
+    res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/runs", headers=headers, timeout=15)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail=res.text)
+    return res.json()
+
+@app.get("/api/v1/github/runs/{owner}/{repo}/{run_id}/logs")
+def github_run_logs_proxy(owner: str, repo: str, run_id: str, current_user: dict = Depends(get_current_user)):
+    import requests
+    pat = get_github_token_for_tenant(current_user.get("email"))
+    headers = {"X-GitHub-Token": pat}
+    res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/runs/{owner}/{repo}/{run_id}/logs", headers=headers, timeout=30)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail=res.text)
+    return res.json()
+
+@app.post("/api/v1/github/runs/{run_id}/rca")
+def github_run_rca_proxy(run_id: str, req: Request, current_user: dict = Depends(get_current_user)):
+    import requests
+    pat = get_github_token_for_tenant(current_user.get("email"))
+    headers = {"X-GitHub-Token": pat}
+    data = req.json()
+    res = requests.post(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/runs/{run_id}/rca", json=data, headers=headers, timeout=120)
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail=res.text)
+    return res.json()
+
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

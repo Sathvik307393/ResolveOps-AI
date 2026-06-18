@@ -36,6 +36,7 @@ export default function Sidebar() {
     { name: "Cloud Resources", path: "/", icon: LayoutDashboard },
     ...(integrations.github ? [{ name: "GitHub Sync", path: "/github", icon: GitBranch }] : []),
     ...(integrations.azure ? [{ name: "Azure Hub", path: "/azure", icon: Cloud }] : []),
+    ...(integrations.aws ? [{ name: "AWS Hub", path: "/aws", icon: Server }] : []),
     { name: "AI Copilot", path: "/chat", icon: MessageSquareCode },
     { name: "Suggestions", path: "/suggestions", icon: Lightbulb },
     { name: "Analytics", path: "/analytics", icon: BarChart3 },

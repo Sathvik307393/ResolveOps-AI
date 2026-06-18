@@ -49,7 +49,11 @@ def sync_resources(req: SyncRequest = Body(...)):
         # Simple cache logic
         _db_cache["resources"] = resources
         
-        ec2 = sum(1 for r in resources if "EC2" in r.get("resource_type", ""))
+        ec2_instances = [r for r in resources if "EC2" in r.get("resource_type", "")]
+        ec2 = len(ec2_instances)
+        ec2_running = sum(1 for r in ec2_instances if r.get("status", "").lower() == "running")
+        ec2_stopped = sum(1 for r in ec2_instances if r.get("status", "").lower() == "stopped")
+        
         rds = sum(1 for r in resources if "RDS" in r.get("resource_type", ""))
         eks = sum(1 for r in resources if "EKS" in r.get("resource_type", ""))
         s3 = sum(1 for r in resources if "S3" in r.get("resource_type", ""))
@@ -71,6 +75,8 @@ def sync_resources(req: SyncRequest = Body(...)):
             "resources_count": len(resources),
             "summary": {
                 "ec2_instances": ec2,
+                "ec2_running": ec2_running,
+                "ec2_stopped": ec2_stopped,
                 "rds_databases": rds,
                 "eks_clusters": eks,
                 "s3_buckets": s3
