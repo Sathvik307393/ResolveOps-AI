@@ -162,8 +162,11 @@ def github_status(x_github_token: Optional[str] = Header(None)):
             raise
         raise HTTPException(status_code=500, detail="Error communicating with GitHub API")
 
+class SyncRequest(BaseModel):
+    scope: str = "owned"
+
 @app.post("/api/v1/github/sync")
-def sync_github(x_github_token: Optional[str] = Header(None)):
+def sync_github(req: SyncRequest, x_github_token: Optional[str] = Header(None)):
     if not x_github_token:
         raise HTTPException(status_code=401, detail="GitHub PAT is missing")
     
@@ -183,21 +186,39 @@ def sync_github(x_github_token: Optional[str] = Header(None)):
     except requests.exceptions.HTTPError as e:
         raise HTTPException(status_code=e.response.status_code, detail="GitHub API error validating token.")
 
-    # 2. Fetch Repositories (with visibility and affiliation for fine-grained PAT support)
+    # 2. Fetch Repositories
+    url_scope_params = "visibility=all&affiliation=owner,collaborator,organization_member"
+    if req.scope == "owned":
+        url_scope_params = "visibility=all&affiliation=owner&type=owner&sort=updated&direction=desc"
+    elif req.scope == "public_owned":
+        url_scope_params = "visibility=public&affiliation=owner&type=owner&sort=updated&direction=desc"
+
     raw_repos = fetch_paginated(
-        "https://api.github.com/user/repos?per_page=100&visibility=all&affiliation=owner,collaborator,organization_member",
+        f"https://api.github.com/user/repos?per_page=100&{url_scope_params}",
         x_github_token
     )
-    logger.info(f"GitHub sync: repositories fetched = {len(raw_repos)}")
+    
+    logger.info(f"GitHub sync: username={username}")
+    logger.info(f"GitHub sync: raw_repos={len(raw_repos)}")
+    
+    filtered_repos = raw_repos
+    excluded_count = 0
+    if req.scope in ["owned", "public_owned"]:
+        filtered_repos = [r for r in raw_repos if r.get("owner", {}).get("login", "").lower() == username.lower()]
+        excluded_count = len(raw_repos) - len(filtered_repos)
+        logger.info(f"GitHub sync: owned_repos={len(filtered_repos)}")
+        logger.info(f"GitHub sync: excluded_accessible_repos={excluded_count}")
+    
+    logger.info(f"GitHub sync: final_repositories_count={len(filtered_repos)}")
     
     # Normalize repos
-    repos_normalized = [normalize_repo(r) for r in raw_repos]
+    repos_normalized = [normalize_repo(r) for r in filtered_repos]
     
     workflows_normalized = []
     runs_normalized = []
     
     # 3 & 4. Fetch Workflows and Runs per repo
-    for repo in raw_repos:
+    for repo in filtered_repos:
         repo_full_name = repo.get("full_name")
         owner = repo.get("owner", {}).get("login")
         repo_name = repo.get("name")
@@ -231,7 +252,9 @@ def sync_github(x_github_token: Optional[str] = Header(None)):
     logger.info(f"GitHub sync: workflow runs fetched = {len(runs_normalized)}")
 
     # Save to "DB"
+    # Overwrite the cache for this user so old accessible repos don't remain when switching to owned
     db.save_sync_data(x_github_token, user_data, repos_normalized, workflows_normalized, runs_normalized, warnings)
+    db.store[x_github_token]["scope"] = req.scope
     
     failed_runs = sum(1 for r in runs_normalized if r["conclusion"] == "failure")
     success_runs = sum(1 for r in runs_normalized if r["conclusion"] == "success")
@@ -270,6 +293,7 @@ def sync_github(x_github_token: Optional[str] = Header(None)):
         "workflows": workflows_normalized,
         "runs": runs_normalized,
         "warnings": warnings,
+        "scope": req.scope,
         "last_synced_at": datetime.datetime.utcnow().isoformat() + "Z"
     }
 

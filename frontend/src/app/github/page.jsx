@@ -18,6 +18,7 @@ export default function GitHubSyncHub() {
   const [diagnoseModal, setDiagnoseModal] = useState({ isOpen: false });
   const [errorMsg, setErrorMsg] = useState(null);
   const [warningMsgs, setWarningMsgs] = useState([]);
+  const [syncScope, setSyncScope] = useState("owned");
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -97,7 +98,10 @@ export default function GitHubSyncHub() {
 
   const performSync = async () => {
     try {
-      const res = await fetchApi("/api/v1/github/sync", { method: "POST" });
+      const res = await fetchApi("/api/v1/github/sync", {
+        method: "POST",
+        body: JSON.stringify({ scope: syncScope })
+      });
 
       if (res.status === "permission_required") {
         setErrorMsg(res.message || "GitHub PAT does not have permission to read Actions workflow runs.");
@@ -248,19 +252,30 @@ export default function GitHubSyncHub() {
               </div>
             )}
           </div>
-          <button
-            onClick={handleForceSync}
-            disabled={syncing}
-            className="relative z-10 bg-white/5 hover:bg-white/10 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all border border-white/10 hover:shadow-[0_0_20px_rgba(255,255,255,0.05)] backdrop-blur-md disabled:opacity-50"
-          >
-            <RefreshCw size={16} className={syncing ? "animate-spin" : ""} /> {syncing ? "Syncing..." : "Force Sync"}
-          </button>
+          <div className="flex flex-col sm:flex-row items-center gap-3 relative z-10">
+            <select
+              value={syncScope}
+              onChange={(e) => setSyncScope(e.target.value)}
+              disabled={syncing}
+              className="bg-slate-900 text-slate-200 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-purple-500 disabled:opacity-50"
+            >
+              <option value="owned">Owned Repositories</option>
+              <option value="accessible">All Accessible Repositories</option>
+            </select>
+            <button
+              onClick={handleForceSync}
+              disabled={syncing}
+              className="bg-white/5 hover:bg-white/10 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all border border-white/10 hover:shadow-[0_0_20px_rgba(255,255,255,0.05)] backdrop-blur-md disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={syncing ? "animate-spin" : ""} /> {syncing ? "Syncing..." : "Force Sync"}
+            </button>
+          </div>
         </div>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
           <div className="glass-panel p-5 rounded-xl border border-slate-700/50 flex flex-col justify-center">
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1 flex items-center gap-1"><Folder size={12}/> Repositories</p>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1 flex items-center gap-1"><Folder size={12}/> {syncScope === "owned" ? "Owned Repositories" : "Accessible Repositories"}</p>
             <p className="text-2xl font-bold text-slate-100">{repos.length}</p>
           </div>
           <div className="glass-panel p-5 rounded-xl border border-slate-700/50 flex flex-col justify-center">

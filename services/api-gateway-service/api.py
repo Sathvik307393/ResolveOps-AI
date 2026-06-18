@@ -2224,7 +2224,7 @@ def github_status_proxy(current_user: dict = Depends(get_current_user)):
     })
 
 @app.post("/api/v1/github/sync")
-def github_sync_proxy(current_user: dict = Depends(get_current_user)):
+async def github_sync_proxy(req: Request, current_user: dict = Depends(get_current_user)):
     import requests
     pat = get_github_token_for_tenant(current_user.get("email"))
     if not pat:
@@ -2235,7 +2235,11 @@ def github_sync_proxy(current_user: dict = Depends(get_current_user)):
             "message": "Connect your GitHub PAT in Integrations to sync repositories and workflows."
         })
     headers = {"X-GitHub-Token": pat}
-    res = requests.post(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/sync", headers=headers, timeout=120)
+    try:
+        data = await req.json()
+    except Exception:
+        data = {"scope": "owned"}
+    res = requests.post(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/sync", json=data, headers=headers, timeout=120)
     if res.status_code == 401:
         return JSONResponse(status_code=200, content={
             "connected": False,
