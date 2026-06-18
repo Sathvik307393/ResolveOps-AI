@@ -24,7 +24,9 @@ export default function GitHubSyncHub() {
 
   const fetchStatus = async () => {
     try {
-      const res = await fetchApi("/api/v1/github/status");
+      // Add a timestamp query parameter to bypass browser/Next.js aggressive caching
+      const t = new Date().getTime();
+      const res = await fetchApi(`/api/v1/github/status?_t=${t}`, { cache: "no-store" });
       if (res && res.status === "connected") {
         setStatusData(res);
         return true;
