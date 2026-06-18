@@ -18,7 +18,7 @@ spec:
       serviceAccountName: resolveops-service-account
       containers:
         - name: frontend
-          image: <ACR_LOGIN_SERVER>/frontend:dev
+          image: reolveopsai.azurecr.io/frontend:dev
           imagePullPolicy: Always
           ports:
             - containerPort: 3000

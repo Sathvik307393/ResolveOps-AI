@@ -27,10 +27,10 @@ This guide details the process for manually building, pushing, and deploying the
 Set your variables (replace the placeholders):
 
 ```bash
-export RESOURCE_GROUP="<RESOURCE_GROUP>"
-export ACR_NAME="<ACR_NAME>"
-export AKS_NAME="<AKS_NAME>"
-export LOCATION="eastus" # or your preferred region
+export RESOURCE_GROUP="resolveops-ai-rg"
+export ACR_NAME="reolveopsai"
+export AKS_NAME="resolveops-ai-aks"
+export LOCATION="centralindia"
 ```
 
 Create the resources:
@@ -65,12 +65,10 @@ Login to Azure and get credentials for both ACR and AKS.
 az login
 
 # Login to ACR via Docker
-az acr login --name <ACR_NAME>
+az acr login --name $ACR_NAME
 
 # Get AKS credentials for kubectl
-az aks get-credentials \
-  --name <AKS_NAME> \
-  --resource-group <RESOURCE_GROUP>
+az aks get-credentials --name resolveops-ai-aks --resource-group resolveops-ai-rg
 ```
 
 ## 7. Build and Push Images
@@ -78,26 +76,18 @@ az aks get-credentials \
 Set the environment variables for the build script, then run it from the root of the repository.
 
 ```bash
-export ACR_NAME="<ACR_NAME>"
-export ACR_LOGIN_SERVER="<ACR_LOGIN_SERVER>" # Usually <ACR_NAME>.azurecr.io
+export ACR_NAME="reolveopsai"
+export ACR_LOGIN_SERVER="reolveopsai.azurecr.io"
 
 chmod +x scripts/build-and-push-acr.sh
 ./scripts/build-and-push-acr.sh
 ```
 
-## 8. Replace Placeholders in YAML
+## 8. Apply Kubernetes YAML
 
-The Kubernetes YAML files in `deploy/k8s/base` contain placeholders for `<ACR_LOGIN_SERVER>`.
-You must replace these placeholders with your actual ACR login server name before deploying.
+(The placeholders in the YAML files have already been replaced with `reolveopsai.azurecr.io` for you).
 
-For example, you can use `sed` (Linux/macOS):
-
-```bash
-# Replace <ACR_LOGIN_SERVER> with your actual server
-sed -i 's/<ACR_LOGIN_SERVER>/myacr.azurecr.io/g' deploy/k8s/base/*.yaml
-```
-
-## 9. Apply Kubernetes YAML
+## 8. Apply Kubernetes YAML
 
 Before deploying, if your application requires secrets (e.g., API keys), create them in the namespace:
 
@@ -125,7 +115,7 @@ Alternatively, you can apply them manually:
 kubectl apply -f deploy/k8s/base/
 ```
 
-## 10. Check Verification
+## 9. Check Verification
 
 Verify that your pods are running and check your services.
 

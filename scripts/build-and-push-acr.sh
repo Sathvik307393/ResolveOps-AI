@@ -7,7 +7,7 @@ set -e
 
 if [ -z "$ACR_NAME" ] || [ -z "$ACR_LOGIN_SERVER" ]; then
   echo "Error: ACR_NAME and ACR_LOGIN_SERVER environment variables must be set."
-  echo "Example: export ACR_NAME=myacr && export ACR_LOGIN_SERVER=myacr.azurecr.io"
+  echo "Example: export ACR_NAME=reolveopsai && export ACR_LOGIN_SERVER=reolveopsai.azurecr.io"
   exit 1
 fi
 
