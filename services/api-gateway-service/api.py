@@ -1997,84 +1997,132 @@ def aws_resource_rca(resource_id: str, req: Request, current_user: dict = Depend
     return res.json()
 
 # --- GitHub Sync Routes ---
+from fastapi.responses import JSONResponse
+
 def get_github_token_for_tenant(tenant_email: str) -> str:
     integrations = get_user_integrations(tenant_email)
     pat = integrations.get("github", {}).get("credentials", {}).get("github_token")
     if not pat:
         pat = os.getenv("GITHUB_PAT")
     if not pat:
-        raise HTTPException(status_code=400, detail="GitHub PAT not configured")
+        return None
     return pat
 
 @app.get("/api/v1/github/status")
 def github_status_proxy(current_user: dict = Depends(get_current_user)):
     import requests
     pat = get_github_token_for_tenant(current_user.get("email"))
+    if not pat:
+        return JSONResponse(status_code=200, content={
+            "connected": False,
+            "status": "github_not_connected",
+            "message": "GitHub PAT is not connected."
+        })
     headers = {"X-GitHub-Token": pat}
     res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/status", headers=headers, timeout=15)
+    if res.status_code == 401:
+        return JSONResponse(status_code=401, content={
+            "status": "permission_required",
+            "error_code": "github_pat_invalid",
+            "message": "GitHub token is invalid or expired."
+        })
+    elif res.status_code == 403:
+        return JSONResponse(status_code=403, content={
+            "status": "permission_required",
+            "error_code": "github_permission_missing",
+            "message": "GitHub token does not have permission to read repositories or Actions workflows."
+        })
     if res.status_code != 200:
-        raise HTTPException(status_code=res.status_code, detail=res.text)
+        return JSONResponse(status_code=res.status_code, content={"message": res.text})
     return res.json()
 
 @app.post("/api/v1/github/sync")
 def github_sync_proxy(current_user: dict = Depends(get_current_user)):
     import requests
     pat = get_github_token_for_tenant(current_user.get("email"))
+    if not pat:
+        return JSONResponse(status_code=400, content={
+            "status": "github_not_connected",
+            "error_code": "github_pat_missing",
+            "message": "Connect your GitHub PAT in Integrations to sync repositories and workflows."
+        })
     headers = {"X-GitHub-Token": pat}
     res = requests.post(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/sync", headers=headers, timeout=120)
+    if res.status_code == 401:
+        return JSONResponse(status_code=401, content={
+            "status": "permission_required",
+            "error_code": "github_pat_invalid",
+            "message": "GitHub token is invalid or expired."
+        })
+    elif res.status_code == 403:
+        return JSONResponse(status_code=403, content={
+            "status": "permission_required",
+            "error_code": "github_permission_missing",
+            "message": "GitHub token does not have permission to read repositories or Actions workflows."
+        })
     if res.status_code != 200:
-        raise HTTPException(status_code=res.status_code, detail=res.text)
+        return JSONResponse(status_code=res.status_code, content={"message": res.text})
     return res.json()
 
 @app.get("/api/v1/github/repos")
 def github_repos_proxy(current_user: dict = Depends(get_current_user)):
     import requests
     pat = get_github_token_for_tenant(current_user.get("email"))
+    if not pat:
+        return JSONResponse(status_code=400, content={"message": "GitHub PAT is not connected."})
     headers = {"X-GitHub-Token": pat}
     res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/repos", headers=headers, timeout=15)
     if res.status_code != 200:
-        raise HTTPException(status_code=res.status_code, detail=res.text)
+        return JSONResponse(status_code=res.status_code, content={"message": res.text})
     return res.json()
 
 @app.get("/api/v1/github/workflows")
 def github_workflows_proxy(current_user: dict = Depends(get_current_user)):
     import requests
     pat = get_github_token_for_tenant(current_user.get("email"))
+    if not pat:
+        return JSONResponse(status_code=400, content={"message": "GitHub PAT is not connected."})
     headers = {"X-GitHub-Token": pat}
     res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/workflows", headers=headers, timeout=15)
     if res.status_code != 200:
-        raise HTTPException(status_code=res.status_code, detail=res.text)
+        return JSONResponse(status_code=res.status_code, content={"message": res.text})
     return res.json()
 
 @app.get("/api/v1/github/runs")
 def github_runs_proxy(current_user: dict = Depends(get_current_user)):
     import requests
     pat = get_github_token_for_tenant(current_user.get("email"))
+    if not pat:
+        return JSONResponse(status_code=400, content={"message": "GitHub PAT is not connected."})
     headers = {"X-GitHub-Token": pat}
     res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/runs", headers=headers, timeout=15)
     if res.status_code != 200:
-        raise HTTPException(status_code=res.status_code, detail=res.text)
+        return JSONResponse(status_code=res.status_code, content={"message": res.text})
     return res.json()
 
 @app.get("/api/v1/github/runs/{owner}/{repo}/{run_id}/logs")
 def github_run_logs_proxy(owner: str, repo: str, run_id: str, current_user: dict = Depends(get_current_user)):
     import requests
     pat = get_github_token_for_tenant(current_user.get("email"))
+    if not pat:
+        return JSONResponse(status_code=400, content={"message": "GitHub PAT is not connected."})
     headers = {"X-GitHub-Token": pat}
     res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/runs/{owner}/{repo}/{run_id}/logs", headers=headers, timeout=30)
     if res.status_code != 200:
-        raise HTTPException(status_code=res.status_code, detail=res.text)
+        return JSONResponse(status_code=res.status_code, content={"message": res.text})
     return res.json()
 
 @app.post("/api/v1/github/runs/{run_id}/rca")
 def github_run_rca_proxy(run_id: str, req: Request, current_user: dict = Depends(get_current_user)):
     import requests
     pat = get_github_token_for_tenant(current_user.get("email"))
+    if not pat:
+        return JSONResponse(status_code=400, content={"message": "GitHub PAT is not connected."})
     headers = {"X-GitHub-Token": pat}
     data = req.json()
     res = requests.post(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/runs/{run_id}/rca", json=data, headers=headers, timeout=120)
     if res.status_code != 200:
-        raise HTTPException(status_code=res.status_code, detail=res.text)
+        return JSONResponse(status_code=res.status_code, content={"message": res.text})
     return res.json()
 
 if __name__ == "__main__":

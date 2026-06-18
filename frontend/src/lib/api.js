@@ -22,14 +22,20 @@ export async function fetchApi(endpoint, options = {}) {
   });
 
   if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+
     if (response.status === 401) {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('jwt_token');
-        window.location.href = '/login';
+      const isAuthEndpoint = path.startsWith('/v1/auth') || path === '/me' || path.includes('/auth/');
+      const isSessionExpired = errorData.error_code === 'session_expired';
+
+      if (isAuthEndpoint || isSessionExpired) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('jwt_token');
+          window.location.href = '/login';
+        }
       }
     }
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || `API Error: ${response.statusText}`);
+    throw new Error(errorData.detail || errorData.message || `API Error: ${response.statusText}`);
   }
 
   return response.json();
