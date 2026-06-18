@@ -276,6 +276,8 @@ export default function AwsResourceDetailPage() {
                 <div className="text-sm text-slate-400 italic">No direct relationships found.</div>
               )}
               <p className="text-xs text-slate-500 mt-4 italic border-t border-slate-700/50 pt-4">More relationships available in Architecture Diagram.</p>
+            </div>
+            
             {/* Sub-Resources */}
             {subresources && (
               <AwsSubResources subresources={subresources} resource={resource} />
