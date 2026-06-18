@@ -19,6 +19,7 @@ export default function GitHubSyncHub() {
   const [errorMsg, setErrorMsg] = useState(null);
   const [warningMsgs, setWarningMsgs] = useState([]);
   const [syncScope, setSyncScope] = useState("owned");
+  const [dispatching, setDispatching] = useState({});
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -183,6 +184,31 @@ export default function GitHubSyncHub() {
     } catch (error) {
       const errMsg = typeof error.message === 'string' ? error.message : JSON.stringify(error);
       setDiagnoseModal({ isOpen: true, loading: false, data: { diagnosis: errMsg || "Error communicating with diagnosis engine.", raw_logs: "Logs not available" } });
+    }
+  };
+
+  const handleDispatch = async (run) => {
+    const parts = (run.repository || "").split('/');
+    if (parts.length !== 2) return;
+    const [owner, repo] = parts;
+    const key = run.id;
+
+    setDispatching(prev => ({ ...prev, [key]: true }));
+    try {
+      const res = await fetchApi(`/api/v1/github/workflows/${owner}/${repo}/${run.workflow_id}/dispatch`, {
+        method: "POST",
+        body: JSON.stringify({ ref: run.branch || "main" })
+      });
+      if (res.status === "success" || res.message?.includes("dispatched")) {
+        // Trigger a sync after a brief wait to fetch the new run
+        setTimeout(() => handleForceSync(), 2000);
+      } else {
+        setErrorMsg(res.message || "Failed to dispatch workflow.");
+      }
+    } catch (e) {
+      setErrorMsg(e.message || "Error dispatching workflow.");
+    } finally {
+      setDispatching(prev => ({ ...prev, [key]: false }));
     }
   };
 
@@ -403,6 +429,14 @@ export default function GitHubSyncHub() {
                             <Bot size={12} /> RCA
                           </button>
                         )}
+                        <button
+                          onClick={() => handleDispatch(run)}
+                          disabled={dispatching[run.id]}
+                          className="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded text-[10px] font-bold border border-indigo-500/30 transition-all flex items-center gap-1 hover:shadow-md disabled:opacity-50"
+                          title="Run Pipeline Again"
+                        >
+                          {dispatching[run.id] ? <RefreshCw size={12} className="animate-spin" /> : <RefreshCw size={12} />} Run
+                        </button>
                       </div>
                     </div>
                   )
