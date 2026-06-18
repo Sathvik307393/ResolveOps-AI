@@ -42,7 +42,23 @@ export async function fetchApi(endpoint, options = {}) {
         }
       }
     }
-    throw new Error(errorData.detail || errorData.message || `API Error: ${response.statusText}`);
+    
+    let errMsg = errorData.message || `API Error: ${response.statusText}`;
+    if (errorData.detail) {
+      if (typeof errorData.detail === 'string') {
+        errMsg = errorData.detail;
+      } else if (Array.isArray(errorData.detail)) {
+        errMsg = errorData.detail.map(d => `${d.loc?.join('.')} ${d.msg}`).join(', ');
+      } else if (typeof errorData.detail === 'object') {
+        errMsg = JSON.stringify(errorData.detail);
+      }
+    }
+    
+    if (typeof errMsg === 'object') {
+      errMsg = JSON.stringify(errMsg);
+    }
+    
+    throw new Error(errMsg);
   }
 
   const contentType = response.headers.get("content-type");

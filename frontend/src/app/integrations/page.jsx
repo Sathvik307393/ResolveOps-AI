@@ -96,12 +96,32 @@ export default function IntegrationsManager() {
       setGithubEmail("");
       setGithubToken("");
     } catch (err) {
-      const message =
+      let message =
         err?.message ||
         err?.detail ||
         err?.error ||
         err?.status ||
-        (typeof err === "object" ? JSON.stringify(err) : String(err));
+        err;
+        
+      if (typeof message !== "string") {
+        try {
+          message = JSON.stringify(message);
+        } catch(e) {
+          message = String(message);
+        }
+      }
+      
+      if (message.includes("[object Object]")) {
+        try {
+          if (err instanceof Error) {
+            message = JSON.stringify({ name: err.name, message: err.message, stack: err.stack });
+          } else {
+            message = JSON.stringify(err);
+          }
+        } catch (e) {
+          message = "An unknown error occurred during validation.";
+        }
+      }
         
       if (process.env.NODE_ENV === "development") {
         console.debug("Connection error:", err);
