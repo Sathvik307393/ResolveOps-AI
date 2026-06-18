@@ -245,7 +245,9 @@ export default function GitHubSyncHub() {
     if (warningMsgs.length > 0) return warningMsgs[0];
     if (repos.length > 0 && workflows.length === 0) return "Repositories found, but no GitHub Actions workflows were detected.";
     if (workflows.length > 0 && runs.length === 0) return "Workflows found, but no recent workflow runs were found.";
-    if (statusData && repos.length === 0) return "Connected to GitHub, but no repositories are accessible with this token.";
+    return "No repositories found for this GitHub account.";
+  };
+
   const filteredRepos = repos.filter(r => repoFilter === "all" || r.full_name === repoFilter);
   const filteredWorkflows = workflows.filter(w => repoFilter === "all" || w.repository === repoFilter);
   const filteredRuns = runs.filter(r => {
@@ -638,6 +640,7 @@ export default function GitHubSyncHub() {
           )}
         </div>
       </div>
+
 
       {/* AI Diagnosis Modal */}
       {diagnoseModal.isOpen && (
