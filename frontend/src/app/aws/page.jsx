@@ -127,7 +127,7 @@ export default function AwsHubPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-8 max-w-7xl mx-auto animate-in fade-in duration-300">
+      <div className="p-8 max-w-[1600px] w-full mx-auto animate-in fade-in duration-300">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-slate-100 flex items-center gap-3">
@@ -286,19 +286,19 @@ function AwsResourceInventory({ resources }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="w-full overflow-x-auto md:overflow-x-visible">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-800/50 text-slate-400 text-xs uppercase tracking-wider">
               <th className="p-4 font-medium">Resource</th>
-              <th className="p-4 font-medium">Type</th>
-              <th className="p-4 font-medium">Region</th>
+              <th className="p-4 font-medium hidden sm:table-cell">Type</th>
+              <th className="p-4 font-medium hidden md:table-cell">Region</th>
               <th className="p-4 font-medium">Status</th>
-              <th className="p-4 font-medium">Instance Type / SKU</th>
+              <th className="p-4 font-medium hidden lg:table-cell">Instance Type / SKU</th>
               <th className="p-4 font-medium">Public IP</th>
-              <th className="p-4 font-medium">Private IP</th>
-              <th className="p-4 font-medium">Risk</th>
-              <th className="p-4 font-medium">Cost status</th>
+              <th className="p-4 font-medium hidden xl:table-cell">Private IP</th>
+              <th className="p-4 font-medium hidden md:table-cell">Risk</th>
+              <th className="p-4 font-medium hidden lg:table-cell">Cost status</th>
               <th className="p-4 font-medium">Actions</th>
             </tr>
           </thead>
@@ -307,14 +307,14 @@ function AwsResourceInventory({ resources }) {
               <tr key={res.id} className="hover:bg-slate-800/30 transition-colors">
                 <td className="p-4">
                   <div className="font-medium text-slate-200">{res.resource_name || res.id}</div>
-                  <div className="text-xs text-slate-500 mt-1 font-mono truncate max-w-xs">{res.id}</div>
+                  <div className="text-xs text-slate-500 mt-1 font-mono truncate max-w-[150px] sm:max-w-[200px] lg:max-w-[300px] xl:max-w-[450px]" title={res.id}>{res.id}</div>
                 </td>
-                <td className="p-4 text-slate-300">
+                <td className="p-4 text-slate-300 hidden sm:table-cell">
                   <span className="px-2.5 py-1 bg-slate-800 rounded-md text-xs border border-slate-700">
                     {res.resource_type.split("::").pop()}
                   </span>
                 </td>
-                <td className="p-4 text-slate-300">{res.region}</td>
+                <td className="p-4 text-slate-300 hidden md:table-cell">{res.region}</td>
                 <td className="p-4">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     res.status.toLowerCase() === 'running' || res.status.toLowerCase() === 'available' || res.status.toLowerCase() === 'active'
@@ -324,16 +324,16 @@ function AwsResourceInventory({ resources }) {
                     {res.status}
                   </span>
                 </td>
-                <td className="p-4 text-slate-300 text-xs">
+                <td className="p-4 text-slate-300 text-xs hidden lg:table-cell">
                   {res.metadata?.instance_type || res.metadata?.instance_class || "-"}
                 </td>
                 <td className="p-4 text-slate-300 text-xs font-mono">
                   {res.metadata?.public_ip || "-"}
                 </td>
-                <td className="p-4 text-slate-300 text-xs font-mono">
+                <td className="p-4 text-slate-300 text-xs font-mono hidden xl:table-cell">
                   {res.metadata?.private_ip || "-"}
                 </td>
-                <td className="p-4">
+                <td className="p-4 hidden md:table-cell">
                   <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
                     res.risk_level === 'critical' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
                     res.risk_level === 'high' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
@@ -343,7 +343,7 @@ function AwsResourceInventory({ resources }) {
                     {res.risk_level}
                   </span>
                 </td>
-                <td className="p-4">
+                <td className="p-4 hidden lg:table-cell">
                   <span className={`text-xs ${
                     res.cost_status === 'available' ? 'text-emerald-400' :
                     res.cost_status === 'permission_required' ? 'text-amber-400' :

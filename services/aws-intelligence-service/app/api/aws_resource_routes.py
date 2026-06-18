@@ -161,3 +161,34 @@ def get_eks_workloads(resource_id: str):
         
     service = AWSEKSVisibilityService({})
     return service.get_cluster_workloads(resource.get("resource_name"), resource.get("region", "us-east-1"))
+
+@router.get("/{resource_id:path}/events")
+def get_resource_events(resource_id: str):
+    resources = _db_cache.get("resources", [])
+    resource = next((r for r in resources if r["id"] == resource_id), None)
+    
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+        
+    # Mocking events for now
+    return {"events": []}
+
+@router.get("/{resource_id:path}/relationships")
+def get_resource_relationships(resource_id: str):
+    resources = _db_cache.get("resources", [])
+    resource = next((r for r in resources if r["id"] == resource_id), None)
+    
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+        
+    relationships = []
+    meta = resource.get("metadata", {})
+    if meta.get("vpc_id"):
+        relationships.append({"type": "VPC", "id": meta.get("vpc_id")})
+    if meta.get("subnet_id"):
+        relationships.append({"type": "Subnet", "id": meta.get("subnet_id")})
+    if meta.get("security_groups"):
+        for sg in meta.get("security_groups", []):
+            relationships.append({"type": "SecurityGroup", "id": sg.get("GroupId", sg)})
+            
+    return {"relationships": relationships}

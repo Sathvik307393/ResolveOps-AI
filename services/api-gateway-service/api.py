@@ -2130,10 +2130,19 @@ def aws_resource_details(resource_id: str, current_user: dict = Depends(get_curr
 def aws_resource_cost(resource_id: str, current_user: dict = Depends(get_current_user)):
     import requests
     safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
-    res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/cost", timeout=10)
-    if res.status_code != 200:
-        raise HTTPException(status_code=res.status_code, detail="Failed to fetch cost")
-    return res.json()
+    try:
+        res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/cost", timeout=10)
+        if res.status_code != 200:
+            return {
+                "cost_status": "unavailable",
+                "reason": "Cost Explorer permission missing or resource-level cost tags are not configured."
+            }
+        return res.json()
+    except Exception:
+        return {
+            "cost_status": "unavailable",
+            "reason": "Cost Explorer permission missing or resource-level cost tags are not configured."
+        }
 
 @app.get("/api/v1/aws/resources/{resource_id:path}/risks")
 def aws_resource_risks(resource_id: str, current_user: dict = Depends(get_current_user)):
@@ -2148,10 +2157,29 @@ def aws_resource_risks(resource_id: str, current_user: dict = Depends(get_curren
 def aws_resource_logs(resource_id: str, current_user: dict = Depends(get_current_user)):
     import requests
     safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
-    res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/logs", timeout=10)
-    if res.status_code != 200:
-        raise HTTPException(status_code=res.status_code, detail="Failed to fetch logs")
-    return res.json()
+    try:
+        res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/logs", timeout=10)
+        if res.status_code != 200:
+            return {
+                "status": "partial_success",
+                "logs_available": False,
+                "message": "No CloudWatch log group is linked to this EC2 instance.",
+                "warnings": [
+                    "CloudWatch Agent may not be configured.",
+                    "CloudTrail lookup permission may be missing."
+                ]
+            }
+        return res.json()
+    except Exception:
+        return {
+            "status": "partial_success",
+            "logs_available": False,
+            "message": "No CloudWatch log group is linked to this EC2 instance.",
+            "warnings": [
+                "CloudWatch Agent may not be configured.",
+                "CloudTrail lookup permission may be missing."
+            ]
+        }
 
 @app.get("/api/v1/aws/resources/{resource_id:path}/metrics")
 def aws_resource_metrics(resource_id: str, current_user: dict = Depends(get_current_user)):
@@ -2171,6 +2199,30 @@ async def aws_resource_rca(resource_id: str, req: Request, current_user: dict = 
     if res.status_code != 200:
         raise HTTPException(status_code=res.status_code, detail="Failed to fetch RCA")
     return res.json()
+
+@app.get("/api/v1/aws/resources/{resource_id:path}/events")
+def aws_resource_events(resource_id: str, current_user: dict = Depends(get_current_user)):
+    import requests
+    safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
+    try:
+        res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/events", timeout=10)
+        if res.status_code == 200:
+            return res.json()
+    except Exception:
+        pass
+    return {"events": []}
+
+@app.get("/api/v1/aws/resources/{resource_id:path}/relationships")
+def aws_resource_relationships(resource_id: str, current_user: dict = Depends(get_current_user)):
+    import requests
+    safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
+    try:
+        res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/relationships", timeout=10)
+        if res.status_code == 200:
+            return res.json()
+    except Exception:
+        pass
+    return {"relationships": []}
 
 # --- GitHub Sync Routes ---
 from fastapi.responses import JSONResponse
