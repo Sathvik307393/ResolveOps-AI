@@ -1,19 +1,41 @@
 from fastapi import APIRouter, HTTPException, Body
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from app.services.aws_connection_service import AWSConnectionService
 
 router = APIRouter(prefix="/api/v1/aws", tags=["AWS Connection"])
 
 class AWSConnectRequest(BaseModel):
-    connection_name: str = Field(..., description="A friendly name for this connection")
-    auth_method: str = Field(..., description="'role_arn' or 'access_keys'")
+    connection_name: str = Field(default="AWS Connection", description="A friendly name for this connection")
+    auth_method: Optional[str] = Field(default=None, description="'role_arn' or 'access_keys'. Auto-detected if omitted.")
     role_arn: Optional[str] = None
     external_id: Optional[str] = None
     access_key_id: Optional[str] = None
     secret_access_key: Optional[str] = None
-    default_region: str = Field(default="us-east-1")
+    default_region: Optional[str] = Field(default=None)
+    region: Optional[str] = Field(default=None, description="Alias for default_region")
+    regions: Optional[List[str]] = Field(default=None, description="Alias for enabled_regions")
     enabled_regions: List[str] = Field(default_factory=lambda: ["us-east-1"])
+
+    @model_validator(mode="after")
+    def normalize_fields(self):
+        # Support 'region' as alias for 'default_region'
+        if not self.default_region and self.region:
+            self.default_region = self.region
+        if not self.default_region:
+            self.default_region = "us-east-1"
+        # Support 'regions' as alias for 'enabled_regions'
+        if self.regions and len(self.regions) > 0:
+            self.enabled_regions = self.regions
+        # Auto-detect auth_method if not provided
+        if not self.auth_method:
+            if self.access_key_id and self.secret_access_key:
+                self.auth_method = "access_keys"
+            elif self.role_arn:
+                self.auth_method = "role_arn"
+            else:
+                self.auth_method = "environment"
+        return self
 
 @router.post("/connect")
 def connect_aws_account(payload: AWSConnectRequest = Body(...)):
@@ -32,12 +54,15 @@ def connect_aws_account(payload: AWSConnectRequest = Body(...)):
     
     if not success:
         raise HTTPException(status_code=400, detail=result)
-        
+
+    account_id = result.get("account_id")
+
     return {
         "message": "AWS connection validated successfully.",
+        "account_id": account_id,
         "connection_details": {
             "name": payload.connection_name,
-            "account_id": result.get("account_id"),
+            "account_id": account_id,
             "auth_method": payload.auth_method,
             "default_region": payload.default_region,
             "enabled_regions": payload.enabled_regions,

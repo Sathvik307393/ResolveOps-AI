@@ -17,7 +17,7 @@ import requests
 
 from database import (
     init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table,
-    get_deployments_table, store_log, get_logs, update_reliability_score, get_reliability_score,
+    get_deployments_table, store_log, get_logs as db_get_logs, update_reliability_score, get_reliability_score,
     store_deployment, get_latest_deployment,
     store_chat_message, get_chat_history, get_chat_sessions, delete_chat_history,
     get_chat_history_table, get_predictive_risks,
@@ -594,7 +594,7 @@ def ingest_telemetry(event: NexusEvent, current_user: dict = Depends(get_current
         else:
             # --- 2. Predictive Pipeline ---
             # Fetch recent logs for analyzing trends
-            recent_logs = get_logs(tenant_id, limit=50)
+            recent_logs = db_get_logs(tenant_id, limit=50)
             
             # Evaluate using predictive heuristics
             is_anomaly, prediction = predictive_engine.analyze_logs_and_predict(recent_logs)
@@ -1198,6 +1198,56 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
                     )
                 
                 req.credentials["github_username"] = github_login
+
+        if req.connected and service_key == "aws" and req.credentials:
+            # Validate AWS credentials via the AWS Intelligence Service
+            import requests as _requests
+            aws_payload = {
+                "connection_name": req.credentials.get("connection_name", "AWS Connection"),
+                "auth_method": "access_keys" if req.credentials.get("access_key_id") else "environment",
+                "access_key_id": req.credentials.get("access_key_id"),
+                "secret_access_key": req.credentials.get("secret_access_key"),
+                "region": req.credentials.get("region", "us-east-1")
+            }
+            try:
+                _aws_svc_url = os.getenv("AWS_INTELLIGENCE_SERVICE_URL", "http://aws-intelligence-service:8000")
+                aws_res = _requests.post(f"{_aws_svc_url}/api/v1/aws/connect", json=aws_payload, timeout=10)
+                if aws_res.status_code != 200:
+                    detail = aws_res.json().get("detail", "AWS credentials could not be validated.") if aws_res.headers.get("content-type", "").startswith("application/json") else "AWS credentials could not be validated."
+                    raise HTTPException(status_code=400, detail=detail)
+                aws_result = aws_res.json()
+                # Read account_id from root or connection_details
+                aws_account_id = aws_result.get("account_id") or aws_result.get("connection_details", {}).get("account_id")
+                aws_region = req.credentials.get("region", "us-east-1")
+                aws_auth_method = aws_payload["auth_method"]
+            except HTTPException:
+                raise
+            except _requests.exceptions.RequestException as e:
+                raise HTTPException(status_code=500, detail=f"Could not reach AWS Intelligence service: {str(e)}")
+
+            # Save full AWS integration metadata
+            integrations["aws"] = {
+                "connected": True,
+                "validated": True,
+                "provider": "aws",
+                "account_id": aws_account_id,
+                "region": aws_region,
+                "auth_method": aws_auth_method,
+                "credentials": req.credentials,
+                "validated_at": datetime.datetime.utcnow().isoformat() + "Z"
+            }
+            update_user_integrations(tenant_email, integrations)
+
+            status_map = {
+                "github": False, "aws": True, "azure": False,
+                "github_details": None
+            }
+            for k in ["github", "azure"]:
+                if k in integrations and integrations[k].get("connected"):
+                    status_map[k] = True
+                    if k == "github":
+                        status_map["github_details"] = integrations[k].get("credentials", {}).get("github_username")
+            return {"status": "success", "message": "AWS connection status updated", "integrations": status_map}
 
         if req.connected and service_key == "azure" and req.credentials:
             from azure.identity import ClientSecretCredential
@@ -1868,9 +1918,22 @@ async def aws_connect(req: Request, current_user: dict = Depends(get_current_use
                 "status": "validation_failed",
                 "message": "Invalid JSON request payload."
             })
+
+        # Normalize payload for the AWS Intelligence Service
+        normalized_payload = {
+            "connection_name": req_data.get("connection_name", "AWS Connection"),
+            "auth_method": req_data.get("auth_method", "access_keys" if req_data.get("access_key_id") else "environment"),
+            "access_key_id": req_data.get("access_key_id"),
+            "secret_access_key": req_data.get("secret_access_key"),
+            "role_arn": req_data.get("role_arn"),
+            "external_id": req_data.get("external_id"),
+            "region": req_data.get("region", req_data.get("default_region", "us-east-1")),
+            "default_region": req_data.get("default_region", req_data.get("region", "us-east-1"))
+        }
+        print(f"AWS connect requested for user (present={bool(tenant_email)})")
             
         try:
-            body = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/connect", json=req_data, timeout=10)
+            body = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/connect", json=normalized_payload, timeout=10)
         except requests.exceptions.RequestException as e:
             return JSONResponse(status_code=500, content={
                 "connected": False,
@@ -1879,29 +1942,49 @@ async def aws_connect(req: Request, current_user: dict = Depends(get_current_use
             })
             
         if body.status_code != 200:
+            error_detail = "AWS credentials could not be validated."
+            try:
+                error_detail = body.json().get("detail", error_detail)
+            except Exception:
+                pass
             return JSONResponse(status_code=body.status_code, content={
                 "connected": False,
                 "validated": False,
                 "status": "validation_failed",
-                "message": body.json().get("detail", "AWS credentials could not be validated.")
+                "message": error_detail
             })
             
         result = body.json()
         
-        # Save credentials securely to DB
+        # Read account_id from root level or from connection_details
+        account_id = result.get("account_id") or result.get("connection_details", {}).get("account_id")
+        region = req_data.get("region", req_data.get("default_region", "us-east-1"))
+        auth_method = normalized_payload["auth_method"]
+        
+        # Save full integration metadata securely to DB
         integrations = get_user_integrations(tenant_email)
-        if "aws" not in integrations:
-            integrations["aws"] = {}
-        integrations["aws"]["connected"] = True
-        integrations["aws"]["credentials"] = req_data # Temporarily store securely in DynamoDB backend
+        integrations["aws"] = {
+            "connected": True,
+            "validated": True,
+            "provider": "aws",
+            "account_id": account_id,
+            "region": region,
+            "auth_method": auth_method,
+            "credentials": req_data,
+            "validated_at": datetime.datetime.utcnow().isoformat() + "Z"
+        }
         update_user_integrations(tenant_email, integrations)
+        print(f"AWS integration saved: provider=aws, region={region}, account_id={account_id}")
         
         return {
             "connected": True,
+            "saved": True,
             "validated": True,
             "status": "connected",
-            "account_id": result.get("account_id"),
-            "region": req_data.get("region", "us-east-1"),
+            "provider": "aws",
+            "account_id": account_id,
+            "region": region,
+            "auth_method": auth_method,
             "message": "AWS connected successfully."
         }
     except HTTPException:
@@ -1918,28 +2001,8 @@ def integrations_status(current_user: dict = Depends(get_current_user)):
         
         integrations = get_user_integrations(tenant_email)
         
-        # 1. AWS Status
-        aws_creds = get_aws_credentials_for_tenant(tenant_email)
-        aws_connected = False
-        aws_account_id = None
-        aws_has_credentials = bool(aws_creds.get("access_key_id") or aws_creds.get("role_arn"))
-        
-        if aws_has_credentials:
-            payload = {
-                "auth_method": "access_keys" if aws_creds.get("access_key_id") and aws_creds.get("secret_access_key") else ("assume_role" if aws_creds.get("role_arn") else "environment"),
-                "access_key_id": aws_creds.get("access_key_id"),
-                "secret_access_key": aws_creds.get("secret_access_key"),
-                "role_arn": aws_creds.get("role_arn"),
-                "external_id": aws_creds.get("external_id"),
-                "regions": [aws_creds.get("region", aws_creds.get("default_region", "us-east-1"))]
-            }
-            try:
-                res = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/connect", json=payload, timeout=10)
-                if res.status_code == 200:
-                    aws_connected = True
-                    aws_account_id = res.json().get("account_id")
-            except:
-                pass
+        # 1. AWS Status — use shared resolver
+        aws_response = resolve_aws_status(tenant_email)
 
         # 2. GitHub Status
         github_data = integrations.get("github", integrations.get("github_actions", {}))
@@ -1964,21 +2027,6 @@ def integrations_status(current_user: dict = Depends(get_current_user)):
         azure_creds = azure_data.get("credentials", {})
         azure_has_credentials = bool(azure_creds.get("client_id") and azure_creds.get("client_secret"))
         azure_connected = azure_has_credentials
-
-        # Prepare AWS Status
-        aws_response = {
-            "saved": aws_has_credentials,
-            "validated": aws_connected,
-            "connected": aws_connected,
-            "has_credentials": aws_has_credentials,
-            "status": "connected" if aws_connected else ("validation_failed" if aws_has_credentials else "disconnected"),
-            "provider": "aws"
-        }
-        if aws_connected:
-            aws_response["account_id"] = aws_account_id
-            aws_response["region"] = aws_creds.get("region", aws_creds.get("default_region", "us-east-1"))
-        elif aws_has_credentials:
-            aws_response["message"] = "AWS credentials could not be validated."
             
         # Prepare GitHub Status
         github_response = {
@@ -2017,42 +2065,10 @@ def integrations_status(current_user: dict = Depends(get_current_user)):
 
 @app.get("/api/v1/aws/status")
 def aws_status(current_user: dict = Depends(get_current_user)):
+    """Returns AWS connection status using the shared resolver."""
     try:
         tenant_email = current_user.get("email")
-        from database import get_user_integrations
-        import requests
-        
-        aws_creds = get_aws_credentials_for_tenant(tenant_email)
-        aws_has_credentials = bool(aws_creds.get("access_key_id") or aws_creds.get("role_arn"))
-        
-        if aws_has_credentials:
-            payload = {
-                "auth_method": "access_keys" if aws_creds.get("access_key_id") and aws_creds.get("secret_access_key") else ("assume_role" if aws_creds.get("role_arn") else "environment"),
-                "access_key_id": aws_creds.get("access_key_id"),
-                "secret_access_key": aws_creds.get("secret_access_key"),
-                "role_arn": aws_creds.get("role_arn"),
-                "external_id": aws_creds.get("external_id"),
-                "regions": [aws_creds.get("region", aws_creds.get("default_region", "us-east-1"))]
-            }
-            res = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/connect", json=payload, timeout=10)
-            if res.status_code == 200:
-                return {
-                    "connected": True,
-                    "saved": True,
-                    "validated": True,
-                    "status": "connected",
-                    "provider": "aws",
-                    "account_id": res.json().get("account_id", "Protected"),
-                    "region": payload["regions"][0],
-                    "auth_method": payload["auth_method"]
-                }
-        return {
-            "connected": False,
-            "saved": False,
-            "validated": False,
-            "status": "aws_not_connected",
-            "message": "Connect AWS in Integrations."
-        }
+        return resolve_aws_status(tenant_email)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2184,6 +2200,122 @@ def get_aws_credentials_for_tenant(tenant_email: str) -> dict:
         if alias in integrations:
             return integrations[alias].get("credentials", {})
     return {}
+
+def _get_aws_integration_record(tenant_email: str) -> dict:
+    """Returns the full AWS integration record (not just credentials) checking all provider aliases."""
+    integrations = get_user_integrations(tenant_email)
+    aws_aliases = ["aws", "amazon_web_services", "amazon-aws", "aws_cloud", "cloud_aws"]
+    for alias in aws_aliases:
+        if alias in integrations and integrations[alias]:
+            return integrations[alias]
+    return {}
+
+def resolve_aws_status(tenant_email: str) -> dict:
+    """
+    Shared AWS status resolver used by both /api/v1/aws/status and /api/v1/integrations/status.
+    Reads the saved integration record from DynamoDB. If the record has connected=true and
+    validated=true, returns connected. Otherwise, checks if credentials exist and attempts
+    live validation as a fallback.
+    Never logs or returns secrets.
+    """
+    import requests as _requests
+    
+    aws_record = _get_aws_integration_record(tenant_email)
+    aws_creds = aws_record.get("credentials", {})
+    aws_has_credentials = bool(aws_creds.get("access_key_id") or aws_creds.get("role_arn"))
+    
+    print(f"AWS status requested: user_id present={bool(tenant_email)}, "
+          f"aliases checked=[aws, amazon_web_services, amazon-aws, aws_cloud, cloud_aws], "
+          f"integration_found={bool(aws_record)}, "
+          f"saved_provider={aws_record.get('provider', 'N/A')}, "
+          f"saved_region={aws_record.get('region', 'N/A')}, "
+          f"account_id={aws_record.get('account_id', 'N/A')}")
+    
+    # Fast path: if the record was previously validated and saved, trust it
+    if aws_record.get("connected") and aws_record.get("validated"):
+        return {
+            "connected": True,
+            "saved": True,
+            "validated": True,
+            "has_credentials": aws_has_credentials,
+            "status": "connected",
+            "provider": "aws",
+            "account_id": aws_record.get("account_id"),
+            "region": aws_record.get("region", aws_creds.get("region", "us-east-1")),
+            "auth_method": aws_record.get("auth_method", "access_keys")
+        }
+    
+    # Fallback: if credentials exist but record isn't marked validated, try live validation
+    if aws_has_credentials:
+        try:
+            _aws_svc_url = os.getenv("AWS_INTELLIGENCE_SERVICE_URL", "http://aws-intelligence-service:8000")
+            payload = {
+                "connection_name": "AWS Status Check",
+                "auth_method": "access_keys" if aws_creds.get("access_key_id") and aws_creds.get("secret_access_key") else ("assume_role" if aws_creds.get("role_arn") else "environment"),
+                "access_key_id": aws_creds.get("access_key_id"),
+                "secret_access_key": aws_creds.get("secret_access_key"),
+                "role_arn": aws_creds.get("role_arn"),
+                "external_id": aws_creds.get("external_id"),
+                "region": aws_creds.get("region", aws_creds.get("default_region", "us-east-1"))
+            }
+            res = _requests.post(f"{_aws_svc_url}/api/v1/aws/connect", json=payload, timeout=10)
+            if res.status_code == 200:
+                result = res.json()
+                account_id = result.get("account_id") or result.get("connection_details", {}).get("account_id")
+                region = payload["region"]
+                
+                # Upgrade the saved record so future checks use the fast path
+                integrations = get_user_integrations(tenant_email)
+                if "aws" not in integrations:
+                    integrations["aws"] = {}
+                integrations["aws"]["connected"] = True
+                integrations["aws"]["validated"] = True
+                integrations["aws"]["provider"] = "aws"
+                integrations["aws"]["account_id"] = account_id
+                integrations["aws"]["region"] = region
+                integrations["aws"]["auth_method"] = payload["auth_method"]
+                integrations["aws"]["validated_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+                if not integrations["aws"].get("credentials"):
+                    integrations["aws"]["credentials"] = aws_creds
+                update_user_integrations(tenant_email, integrations)
+                print(f"AWS status: live validation succeeded, record upgraded. account_id={account_id}")
+                
+                return {
+                    "connected": True,
+                    "saved": True,
+                    "validated": True,
+                    "has_credentials": True,
+                    "status": "connected",
+                    "provider": "aws",
+                    "account_id": account_id,
+                    "region": region,
+                    "auth_method": payload["auth_method"]
+                }
+            else:
+                print(f"AWS status: live validation failed with status_code={res.status_code}")
+        except Exception as e:
+            print(f"AWS status: live validation error: {str(e)}")
+        
+        return {
+            "connected": False,
+            "saved": True,
+            "validated": False,
+            "has_credentials": True,
+            "status": "validation_failed",
+            "provider": "aws",
+            "message": "AWS credentials could not be validated."
+        }
+    
+    # No credentials found
+    return {
+        "connected": False,
+        "saved": False,
+        "validated": False,
+        "has_credentials": False,
+        "status": "disconnected",
+        "provider": "aws",
+        "message": "Connect AWS in Integrations."
+    }
 
 @app.get("/api/v1/github/status")
 def github_status_proxy(current_user: dict = Depends(get_current_user)):
