@@ -80,7 +80,7 @@ export default function AwsHubPage() {
       }
     } catch (err) {
       console.error("Failed to fetch AWS status", err);
-      setStatus("disconnected");
+      setStatus("error");
     }
   };
 
@@ -153,7 +153,13 @@ export default function AwsHubPage() {
           )}
         </div>
 
-        {status === "disconnected" ? (
+        {status === "error" ? (
+          <div className="glass-panel p-12 rounded-xl border border-rose-500/50 text-center">
+            <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto mb-4" />
+            <h3 className="text-xl font-medium text-slate-200 mb-2">AWS status endpoint unavailable. Check backend routing.</h3>
+            <p className="text-slate-400 mb-6">Could not verify connection state.</p>
+          </div>
+        ) : status === "disconnected" ? (
           <div className="glass-panel p-12 rounded-xl border border-slate-700/50 text-center">
             <Cloud className="w-12 h-12 text-slate-600 mx-auto mb-4" />
             <h3 className="text-xl font-medium text-slate-200 mb-2">AWS is not connected.</h3>

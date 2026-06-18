@@ -1153,6 +1153,30 @@ def get_integrations(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/v1/aws/status")
+def get_aws_hub_status(current_user: dict = Depends(get_current_user)):
+    """Retrieves the AWS connection status explicitly from the central integrations state."""
+    try:
+        tenant_email = current_user.get("email")
+        integrations = get_user_integrations(tenant_email)
+        
+        aws_data = integrations.get("aws", {})
+        if aws_data and aws_data.get("connected"):
+            return {
+                "connected": True,
+                "provider": "aws",
+                "account_id": aws_data.get("account_id"),
+                "region": aws_data.get("region", "us-east-1"),
+                "auth_method": aws_data.get("auth_method")
+            }
+        
+        return {
+            "connected": False,
+            "message": "AWS is not connected."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/v1/integrations/connect")
 def update_integration_connection(req: ConnectionRequest, current_user: dict = Depends(get_current_user)):
     """Updates / Saves credentials and toggles connection status for an external service."""
