@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: resolveops-ai-dev
+  labels:
+    app: notification-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      serviceAccountName: resolveops-service-account
+      containers:
+        - name: notification-service
+          image: <ACR_LOGIN_SERVER>/notification-service:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          envFrom:
+            - configMapRef:
+                name: resolveops-config
+            - secretRef:
+                name: resolveops-secrets
+                optional: true
+---
+# Backend services stay private inside the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: resolveops-ai-dev
+spec:
+  type: ClusterIP
+  selector:
+    app: notification-service
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000

@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: azure-intelligence-service
+  namespace: resolveops-ai-dev
+  labels:
+    app: azure-intelligence-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: azure-intelligence-service
+  template:
+    metadata:
+      labels:
+        app: azure-intelligence-service
+    spec:
+      serviceAccountName: resolveops-service-account
+      containers:
+        - name: azure-intelligence-service
+          image: <ACR_LOGIN_SERVER>/azure-intelligence-service:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          envFrom:
+            - configMapRef:
+                name: resolveops-config
+            - secretRef:
+                name: resolveops-secrets
+                optional: true
+---
+# Backend services stay private inside the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: azure-intelligence-service
+  namespace: resolveops-ai-dev
+spec:
+  type: ClusterIP
+  selector:
+    app: azure-intelligence-service
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000

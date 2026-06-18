@@ -1,0 +1,29 @@
+# Example of an Ingress configuration if an Ingress Controller (like NGINX) is installed.
+# For manual testing without an ingress controller, rely on the LoadBalancer services instead.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: resolveops-ingress
+  namespace: resolveops-ai-dev
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: resolveops-dev.local
+      http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway-service
+                port:
+                  number: 8000
+          - path: /()(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

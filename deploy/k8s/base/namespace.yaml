@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: resolveops-ai-dev
+  labels:
+    environment: dev
+    app: resolveops-ai

@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway-service
+  namespace: resolveops-ai-dev
+  labels:
+    app: api-gateway-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway-service
+  template:
+    metadata:
+      labels:
+        app: api-gateway-service
+    spec:
+      serviceAccountName: resolveops-service-account
+      containers:
+        - name: api-gateway-service
+          image: <ACR_LOGIN_SERVER>/api-gateway-service:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          envFrom:
+            - configMapRef:
+                name: resolveops-config
+            - secretRef:
+                name: resolveops-secrets
+                optional: true
+---
+# API Gateway is exposed directly for the first AKS test.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway-service
+  namespace: resolveops-ai-dev
+spec:
+  type: LoadBalancer
+  selector:
+    app: api-gateway-service
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000

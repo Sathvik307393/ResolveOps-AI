@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-intelligence-service
+  namespace: resolveops-ai-dev
+  labels:
+    app: github-intelligence-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: github-intelligence-service
+  template:
+    metadata:
+      labels:
+        app: github-intelligence-service
+    spec:
+      serviceAccountName: resolveops-service-account
+      containers:
+        - name: github-intelligence-service
+          image: <ACR_LOGIN_SERVER>/github-intelligence-service:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          envFrom:
+            - configMapRef:
+                name: resolveops-config
+            - secretRef:
+                name: resolveops-secrets
+                optional: true
+---
+# Backend services stay private inside the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: github-intelligence-service
+  namespace: resolveops-ai-dev
+spec:
+  type: ClusterIP
+  selector:
+    app: github-intelligence-service
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
