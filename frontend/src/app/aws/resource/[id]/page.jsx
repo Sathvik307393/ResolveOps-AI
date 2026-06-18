@@ -64,7 +64,14 @@ export default function AwsResourceDetailPage() {
       const metricsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/metrics`).catch((e) => ({
         status: "error", metrics: null, message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load metrics."
       }));
-      setMetrics(metricsData?.metrics && typeof metricsData.metrics === "object" ? metricsData.metrics : null);
+      const metricsList = Array.isArray(metricsData)
+        ? metricsData
+        : Array.isArray(metricsData?.metrics)
+        ? metricsData.metrics
+        : Array.isArray(metricsData?.data)
+        ? metricsData.data
+        : [];
+      setMetrics(metricsList);
 
       const eventsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/events`).catch((e) => ({
         status: "error", events: [], message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load events."
@@ -283,11 +290,26 @@ export default function AwsResourceDetailPage() {
                     </div>
                   )}
                   <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                    <p className="text-sm text-slate-400">Estimated Running Price (Monthly)</p>
+                    <div className="flex items-center justify-between mb-2">
+                       <p className="text-sm text-slate-400">Estimated Running Price</p>
+                       <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded text-[10px] uppercase font-bold tracking-wider">Estimated</span>
+                    </div>
                     <p className="text-xl font-bold text-slate-200">
-                      {cost.estimated_running_price?.status === "available" ? `$${cost.estimated_running_price.monthly}` : "Unavailable"}
+                      {cost.estimated_running_price?.status === "available" ? `$${cost.estimated_running_price.monthly} /mo` : "Unavailable"}
                     </p>
-                    <p className="text-xs text-slate-500 mt-1">Confidence: {cost.estimated_running_price?.confidence}</p>
+                    {cost.estimated_running_price?.status === "available" && (
+                       <div className="flex items-center gap-4 mt-2 border-t border-slate-700/50 pt-2">
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase">Daily</p>
+                            <p className="text-sm font-medium text-slate-300">${(Number(cost.estimated_running_price.monthly) / 30).toFixed(2)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase">Hourly</p>
+                            <p className="text-sm font-medium text-slate-300">${(Number(cost.estimated_running_price.monthly) / 730).toFixed(3)}</p>
+                          </div>
+                       </div>
+                    )}
+                    <p className="text-xs text-slate-500 mt-2">Confidence: {cost.estimated_running_price?.confidence}</p>
                     {Array.isArray(cost.estimated_running_price?.warnings) && cost.estimated_running_price.warnings.map((w, i) => (
                        <p key={i} className="text-xs text-amber-400 mt-1">{w}</p>
                     ))}
@@ -460,23 +482,50 @@ function AwsResourceMetadataGrid({ resource }) {
   );
 }
 
+function formatBytes(bytes, decimals = 2) {
+  if (!+bytes) return '0 B';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
+function formatMetricName(name) {
+  if (!name) return "";
+  return name.replace(/([A-Z])/g, ' $1').trim();
+}
+
+function formatMetricValue(val, unit) {
+  if (val === undefined || val === null) return "0";
+  if (unit === 'Percent') return `${Number(val).toFixed(2)}%`;
+  if (unit === 'Bytes') return formatBytes(Number(val));
+  if (unit === 'Count') return String(val);
+  return `${Number(val).toFixed(2)} ${unit || ''}`;
+}
+
 function AwsResourceLogsAndEvents({ logs, logsStatus, metrics, events, resource }) {
   return (
     <div className="space-y-6">
       {/* Metrics Snapshot */}
-      {metrics && (
-        <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-slate-300 border-b border-slate-700 pb-2">Metrics Snapshot</h4>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {Object.entries(metrics).slice(0, 4).map(([k, v], i) => (
-              <div key={i} className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 text-center">
-                <p className="text-xs text-slate-400 mb-1 truncate" title={k}>{k}</p>
-                <p className="text-lg font-bold text-slate-200">{typeof v === 'number' ? v.toFixed(2) : (typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v))}</p>
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-slate-300 border-b border-slate-700 pb-2">Metrics Snapshot</h4>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {metrics && metrics.length > 0 ? (
+            metrics.slice(0, 8).map((m, i) => (
+              <div key={i} className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 text-center min-w-0 overflow-hidden">
+                <p className="text-xs text-slate-400 mb-1 truncate" title={m.name || 'Unknown'}>{formatMetricName(m.name || 'Unknown')}</p>
+                <p className="text-lg font-bold text-slate-200 truncate" title={String(m.value)}>{formatMetricValue(m.value, m.unit)}</p>
+                {m.status && <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wider truncate">{m.status}</p>}
               </div>
-            ))}
-          </div>
+            ))
+          ) : (
+            <div className="col-span-full p-4 bg-slate-800/30 text-slate-400 text-sm text-center border border-slate-700/30 rounded-lg">
+              No metrics data available.
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Log Collection Status & Logs */}
       <div className="space-y-3">
