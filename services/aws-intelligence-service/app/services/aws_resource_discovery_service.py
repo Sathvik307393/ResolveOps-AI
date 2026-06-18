@@ -422,3 +422,36 @@ class AWSResourceDiscoveryService:
             logger.error(f"Failed to scan CloudWatch alarms in {region}: {e}")
             warnings.append(self._format_warning("cloudwatch", e))
         return resources, warnings
+
+    def get_single_resource(self, resource_id: str, region: str) -> Dict:
+        """
+        Targeted lookup for a single resource.
+        Mainly supports EC2 instances for now as requested.
+        """
+        try:
+            # Check if it's an EC2 instance by ARN or just checking the string
+            if "ec2" in resource_id.lower() and "instance/" in resource_id.lower():
+                instance_id = resource_id.split("instance/")[-1]
+                ec2 = self._get_client('ec2', region)
+                resp = ec2.describe_instances(InstanceIds=[instance_id])
+                for reservation in resp.get('Reservations', []):
+                    for inst in reservation.get('Instances', []):
+                        name = next((t['Value'] for t in inst.get('Tags', []) if t['Key'] == 'Name'), instance_id)
+                        arn = resource_id
+                        return normalize_aws_resource(
+                            account_id=self.account_id, region=region, resource_type="AWS::EC2::Instance",
+                            resource_name=name, arn=arn, status=inst.get('State', {}).get('Name', 'unknown'),
+                            created_at=inst.get('LaunchTime'),
+                            metadata={
+                                "instance_type": inst.get('InstanceType'),
+                                "vpc_id": inst.get('VpcId'),
+                                "subnet_id": inst.get('SubnetId'),
+                                "private_ip": inst.get('PrivateIpAddress'),
+                                "public_ip": inst.get('PublicIpAddress'),
+                                "architecture": inst.get('Architecture')
+                            }
+                        )
+        except Exception as e:
+            logger.error(f"Failed targeted lookup for {resource_id}: {e}")
+            
+        return None

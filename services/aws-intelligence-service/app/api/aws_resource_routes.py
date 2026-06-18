@@ -67,8 +67,11 @@ def sync_resources(
         service = AWSResourceDiscoveryService(auth_kwargs)
         resources, scan_warnings = service.scan_regions(req.regions)
         
-        # Simple cache logic
-        _db_cache["resources"] = resources
+        # Store in tenant-specific cache
+        if x_tenant_email not in _db_cache:
+            _db_cache[x_tenant_email] = {}
+        _db_cache[x_tenant_email]["resources"] = resources
+        _db_cache[x_tenant_email]["last_synced_at"] = __import__('datetime').datetime.utcnow().isoformat() + "Z"
         
         ec2_instances = [r for r in resources if "EC2" in r.get("resource_type", "")]
         ec2 = len(ec2_instances)
@@ -109,17 +112,18 @@ def sync_resources(
         raise HTTPException(status_code=500, detail=f"Failed to sync AWS resources: {str(e)}")
 
 @router.get("")
-def get_resources():
+def get_resources(x_tenant_email: Optional[str] = Header(None)):
     """
     Returns the discovered resources.
     """
-    return {"resources": _db_cache.get("resources", [])}
+    tenant_cache = _db_cache.get(x_tenant_email, {})
+    return {"resources": tenant_cache.get("resources", [])}
 
 # Moved get_resource to the bottom to avoid path shadowing
 
 @router.get("/{resource_id:path}/cost")
-def get_resource_cost(resource_id: str):
-    resources = _db_cache.get("resources", [])
+def get_resource_cost(resource_id: str, x_tenant_email: Optional[str] = Header(None)):
+    resources = _db_cache.get(x_tenant_email, {}).get("resources", [])
     resource = next((r for r in resources if r["id"] == resource_id), None)
     
     if not resource:
@@ -154,8 +158,8 @@ def get_resource_cost(resource_id: str):
         }
 
 @router.get("/{resource_id:path}/risks")
-def get_resource_risks(resource_id: str):
-    resources = _db_cache.get("resources", [])
+def get_resource_risks(resource_id: str, x_tenant_email: Optional[str] = Header(None)):
+    resources = _db_cache.get(x_tenant_email, {}).get("resources", [])
     resource = next((r for r in resources if r["id"] == resource_id), None)
     
     if not resource:
@@ -169,8 +173,8 @@ def get_resource_risks(resource_id: str):
         return {"status": "success", "risks": []}
 
 @router.get("/{resource_id:path}/logs")
-def get_resource_logs(resource_id: str):
-    resources = _db_cache.get("resources", [])
+def get_resource_logs(resource_id: str, x_tenant_email: Optional[str] = Header(None)):
+    resources = _db_cache.get(x_tenant_email, {}).get("resources", [])
     resource = next((r for r in resources if r["id"] == resource_id), None)
     
     fallback = {
@@ -190,8 +194,8 @@ def get_resource_logs(resource_id: str):
         return fallback
 
 @router.get("/{resource_id:path}/metrics")
-def get_resource_metrics(resource_id: str):
-    resources = _db_cache.get("resources", [])
+def get_resource_metrics(resource_id: str, x_tenant_email: Optional[str] = Header(None)):
+    resources = _db_cache.get(x_tenant_email, {}).get("resources", [])
     resource = next((r for r in resources if r["id"] == resource_id), None)
     
     if not resource:
@@ -209,8 +213,8 @@ def get_resource_metrics(resource_id: str):
         return {"status": "success", "metrics": []}
 
 @router.get("/{resource_id:path}/workloads")
-def get_eks_workloads(resource_id: str):
-    resources = _db_cache.get("resources", [])
+def get_eks_workloads(resource_id: str, x_tenant_email: Optional[str] = Header(None)):
+    resources = _db_cache.get(x_tenant_email, {}).get("resources", [])
     resource = next((r for r in resources if r["id"] == resource_id), None)
     
     if not resource:
@@ -223,12 +227,12 @@ def get_eks_workloads(resource_id: str):
     return service.get_cluster_workloads(resource.get("resource_name"), resource.get("region", "us-east-1"))
 
 @router.get("/{resource_id:path}/events")
-def get_resource_events(resource_id: str):
+def get_resource_events(resource_id: str, x_tenant_email: Optional[str] = Header(None)):
     return {"status": "success", "events": []}
 
 @router.get("/{resource_id:path}/subresources")
-def get_resource_subresources(resource_id: str):
-    resources = _db_cache.get("resources", [])
+def get_resource_subresources(resource_id: str, x_tenant_email: Optional[str] = Header(None)):
+    resources = _db_cache.get(x_tenant_email, {}).get("resources", [])
     resource = next((r for r in resources if r["id"] == resource_id), None)
     
     fallback = {
@@ -251,8 +255,8 @@ def get_resource_subresources(resource_id: str):
         return fallback
 
 @router.get("/{resource_id:path}/runtime")
-def get_resource_runtime(resource_id: str):
-    resources = _db_cache.get("resources", [])
+def get_resource_runtime(resource_id: str, x_tenant_email: Optional[str] = Header(None)):
+    resources = _db_cache.get(x_tenant_email, {}).get("resources", [])
     resource = next((r for r in resources if r["id"] == resource_id), None)
     
     fallback = {
@@ -275,8 +279,8 @@ def get_resource_runtime(resource_id: str):
         return fallback
 
 @router.get("/{resource_id:path}/relationships")
-def get_resource_relationships(resource_id: str):
-    resources = _db_cache.get("resources", [])
+def get_resource_relationships(resource_id: str, x_tenant_email: Optional[str] = Header(None)):
+    resources = _db_cache.get(x_tenant_email, {}).get("resources", [])
     resource = next((r for r in resources if r["id"] == resource_id), None)
     
     if not resource:
@@ -322,8 +326,8 @@ def get_resource_relationships(resource_id: str):
     return {"status": "success", "relationships": relationships}
 
 @router.post("/{resource_id:path}/rca")
-def generate_resource_rca(resource_id: str, context: dict = Body(...)):
-    resources = _db_cache.get("resources", [])
+def generate_resource_rca(resource_id: str, x_tenant_email: Optional[str] = Header(None), context: dict = Body(...)):
+    resources = _db_cache.get(x_tenant_email, {}).get("resources", [])
     resource = next((r for r in resources if r["id"] == resource_id), None)
     
     if not resource:
@@ -352,8 +356,8 @@ def generate_resource_rca(resource_id: str, context: dict = Body(...)):
     }
 
 @router.get("/{resource_id:path}")
-def get_resource(resource_id: str):
-    resources = _db_cache.get("resources", [])
+def get_resource(resource_id: str, x_tenant_email: Optional[str] = Header(None)):
+    resources = _db_cache.get(x_tenant_email, {}).get("resources", [])
     resource = next((r for r in resources if r["id"] == resource_id), None)
     if not resource:
         raise HTTPException(status_code=404, detail="Resource not found")
