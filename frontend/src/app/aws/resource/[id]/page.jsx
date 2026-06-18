@@ -25,6 +25,9 @@ export default function AwsResourceDetailPage() {
   const [runtime, setRuntime] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [rcaData, setRcaData] = useState(null);
+  const [rcaLoading, setRcaLoading] = useState(false);
+  const [rcaModalOpen, setRcaModalOpen] = useState(false);
 
   useEffect(() => {
     fetchResourceData();
@@ -99,8 +102,27 @@ export default function AwsResourceDetailPage() {
   };
 
   const generateRca = async () => {
-    // RCA trigger logic
-    alert("Generating AI RCA via Amazon Bedrock...");
+    setRcaModalOpen(true);
+    setRcaLoading(true);
+    try {
+      const payload = { resource, cost, risks, metrics, logs, runtime, relationships };
+      const res = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/rca`, {
+         method: "POST",
+         body: JSON.stringify(payload)
+      });
+      setRcaData(res.rca);
+    } catch(err) {
+      setRcaData({
+         summary: "Error generating RCA.",
+         probable_root_cause: err.message,
+         evidence: [],
+         recommended_fix: "Try again later.",
+         confidence: "Low",
+         data_sources_used: []
+      });
+    } finally {
+      setRcaLoading(false);
+    }
   };
 
   if (loading) {
@@ -224,31 +246,31 @@ export default function AwsResourceDetailPage() {
               <h3 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-emerald-400" /> Cost Intelligence
               </h3>
-              {cost?.cost_status === "unavailable" ? (
-                <div className="p-4 bg-slate-800 border border-slate-700 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-slate-200">Resource-level cost unavailable</p>
-                      <p className="text-sm text-slate-400 mt-1">{cost.reason || "Cost Explorer permissions or resource-level tags are not configured."}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : cost ? (
+              {cost ? (
                 <div className="space-y-4">
-                  <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                    <p className="text-sm text-slate-400">Month-to-Date (Actual)</p>
-                    <p className="text-2xl font-bold text-emerald-400">
-                      {cost.actual_cost?.status === "available" ? `$${cost.actual_cost.month_to_date}` : "Unavailable"}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">Source: {cost.actual_cost?.source}</p>
-                  </div>
+                  {cost.actual_cost?.status === "permission_required" ? (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
+                      <AlertTriangle className="w-4 h-4 inline mr-2 -mt-0.5" />
+                      Cost Explorer permission required for exact actual cost.
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                      <p className="text-sm text-slate-400">Month-to-Date (Actual)</p>
+                      <p className="text-2xl font-bold text-emerald-400">
+                        {cost.actual_cost?.status === "available" ? `$${cost.actual_cost.month_to_date}` : "Unavailable"}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">Source: {cost.actual_cost?.source}</p>
+                    </div>
+                  )}
                   <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
                     <p className="text-sm text-slate-400">Estimated Running Price (Monthly)</p>
                     <p className="text-xl font-bold text-slate-200">
                       {cost.estimated_running_price?.status === "available" ? `$${cost.estimated_running_price.monthly}` : "Unavailable"}
                     </p>
                     <p className="text-xs text-slate-500 mt-1">Confidence: {cost.estimated_running_price?.confidence}</p>
+                    {cost.estimated_running_price?.warnings && cost.estimated_running_price.warnings.map((w, i) => (
+                       <p key={i} className="text-xs text-amber-400 mt-1">{w}</p>
+                    ))}
                   </div>
                 </div>
               ) : (
@@ -290,6 +312,67 @@ export default function AwsResourceDetailPage() {
           </div>
         </div>
       </div>
+      
+      {/* RCA Modal */}
+      {rcaModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl">
+            <div className="sticky top-0 bg-slate-900 border-b border-slate-700 p-4 flex items-center justify-between z-10">
+              <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                <Activity className="w-5 h-5 text-indigo-400" /> AI Root Cause Analysis
+              </h2>
+              <button onClick={() => setRcaModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
+            </div>
+            <div className="p-6">
+              {rcaLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <Activity className="w-8 h-8 text-indigo-500 animate-spin" />
+                  <p className="text-slate-400">Analyzing resource context and generating RCA...</p>
+                </div>
+              ) : rcaData ? (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Summary</h3>
+                    <p className="text-slate-200">{rcaData.summary}</p>
+                  </div>
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                    <h3 className="text-sm font-semibold text-amber-500 uppercase tracking-wider mb-2">Probable Root Cause</h3>
+                    <p className="text-slate-200 font-medium">{rcaData.probable_root_cause}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-2">Recommended Fix</h3>
+                    <p className="text-slate-200">{rcaData.recommended_fix}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Confidence</h3>
+                      <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300 text-sm">
+                        {rcaData.confidence}
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Data Sources</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {rcaData.data_sources_used?.map((ds, i) => (
+                           <span key={i} className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300 text-xs">{ds}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  {rcaData.evidence && rcaData.evidence.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Evidence</h3>
+                      <ul className="list-disc pl-5 space-y-1 text-sm text-slate-300">
+                        {rcaData.evidence.map((ev, i) => <li key={i}>{ev}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }
@@ -501,6 +584,7 @@ function AwsRuntime({ runtime }) {
   
   const isError = runtime.status === "error" || runtime.status === "permission_required";
   const hasContainers = runtime.runtime?.containers && runtime.runtime.containers.length > 0;
+  const rawOutput = runtime.runtime?.raw_output;
 
   return (
     <div className="glass-panel p-6 rounded-xl border border-slate-700/50">
@@ -518,28 +602,44 @@ function AwsRuntime({ runtime }) {
             </div>
           </div>
         </div>
-      ) : hasContainers ? (
-        <div className="space-y-3">
-          {runtime.runtime.containers.map((c, i) => (
-            <div key={i} className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg flex flex-wrap gap-4 items-center justify-between text-sm">
-               <div className="flex flex-col">
-                  <span className="text-slate-500 text-xs">Container Name</span>
-                  <span className="text-slate-200 font-bold">{c.name}</span>
-               </div>
-               <div className="flex flex-col">
-                  <span className="text-slate-500 text-xs">Image</span>
-                  <span className="text-slate-300 font-mono">{c.image}</span>
-               </div>
-               <div className="flex flex-col">
-                  <span className="text-slate-500 text-xs">Status</span>
-                  <span className="text-emerald-400">{c.status}</span>
-               </div>
-            </div>
-          ))}
-        </div>
       ) : (
-        <div className="p-4 bg-slate-800 border border-slate-700 rounded-lg text-slate-400 text-sm">
-          {runtime.message || "No runtime containers discovered."}
+        <div className="space-y-4">
+           {runtime.message && (
+             <div className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-300 text-sm">
+               {runtime.message}
+             </div>
+           )}
+           
+           {hasContainers && (
+             <div className="space-y-3">
+               <h4 className="text-sm font-semibold text-slate-300">Docker Containers</h4>
+               {runtime.runtime.containers.map((c, i) => (
+                 <div key={i} className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg flex flex-wrap gap-4 items-center justify-between text-sm">
+                    <div className="flex flex-col">
+                       <span className="text-slate-500 text-xs">Container Name</span>
+                       <span className="text-slate-200 font-bold">{c.name}</span>
+                    </div>
+                    <div className="flex flex-col">
+                       <span className="text-slate-500 text-xs">Image</span>
+                       <span className="text-slate-300 font-mono">{c.image}</span>
+                    </div>
+                    <div className="flex flex-col">
+                       <span className="text-slate-500 text-xs">Status</span>
+                       <span className="text-emerald-400">{c.status}</span>
+                    </div>
+                 </div>
+               ))}
+             </div>
+           )}
+           
+           {rawOutput && (
+             <div className="mt-4">
+               <h4 className="text-sm font-semibold text-slate-300 mb-2">Host Performance (Raw)</h4>
+               <div className="bg-slate-950 p-4 rounded-lg font-mono text-xs text-slate-300 max-h-64 overflow-y-auto whitespace-pre-wrap border border-slate-800">
+                 {rawOutput}
+               </div>
+             </div>
+           )}
         </div>
       )}
     </div>

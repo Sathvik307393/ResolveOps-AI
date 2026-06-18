@@ -54,48 +54,64 @@ class AWSRuntimeService:
             # Note: A real implementation would wait for the command invocation to complete.
             # Here we simulate the command request and return a mocked parsed response or error
             try:
+                import json
+                script = "if ! command -v docker &> /dev/null; then echo 'DOCKER_MISSING'; elif ! docker ps > /dev/null 2>&1; then echo 'DOCKER_DENIED'; else echo 'DOCKER_OK'; echo '---PS---'; docker ps -a --format '{{json .}}'; echo '---STATS---'; docker stats --no-stream --format '{{json .}}'; echo '---DF---'; docker system df --format '{{json .}}'; fi; echo '---HOST---'; df -h; echo '---FREE---'; free -m; echo '---UPTIME---'; uptime"
                 cmd = ssm.send_command(
                     InstanceIds=[instance_id],
                     DocumentName="AWS-RunShellScript",
-                    Parameters={"commands": ["docker ps --format '{{.ID}}|{{.Image}}|{{.Status}}|{{.Names}}' || echo 'Docker not found'"]}
+                    Parameters={"commands": [script]}
                 )
                 command_id = cmd['Command']['CommandId']
                 
-                # Mock a short wait (in real life, we poll or use event bridge)
-                time.sleep(1)
+                # Poll for up to 5 seconds
+                invocation = None
+                for _ in range(5):
+                    time.sleep(1)
+                    try:
+                        inv = ssm.get_command_invocation(CommandId=command_id, InstanceId=instance_id)
+                        if inv['Status'] in ['Success', 'Failed', 'Cancelled', 'TimedOut']:
+                            invocation = inv
+                            break
+                    except ClientError:
+                        pass
                 
-                try:
-                    invocation = ssm.get_command_invocation(
-                        CommandId=command_id,
-                        InstanceId=instance_id
-                    )
+                if invocation and invocation['Status'] == 'Success':
+                    output = invocation['StandardOutputContent']
                     
-                    if invocation['Status'] == 'Success':
-                        output = invocation['StandardOutputContent']
-                        if 'Docker not found' not in output:
-                            for line in output.strip().split('\n'):
-                                if '|' in line:
-                                    parts = line.split('|')
-                                    if len(parts) >= 4:
-                                        result["runtime"]["containers"].append({
-                                            "id": parts[0],
-                                            "image": parts[1],
-                                            "status": parts[2],
-                                            "name": parts[3]
-                                        })
+                    if 'DOCKER_MISSING' in output:
+                        result["message"] = "Docker is not installed on this EC2 instance."
+                    elif 'DOCKER_DENIED' in output:
+                        result["message"] = "Docker exists, but the runtime user cannot access Docker."
                     else:
-                        result["message"] = "SSM command executed but did not succeed. Check SSM agent logs."
+                        result["message"] = "Runtime workloads discovered successfully."
                         
-                except ClientError as e:
-                    # Invocation might not be ready
-                    result["message"] = "Command sent, but unable to retrieve results yet."
-            
+                    result["runtime"]["raw_output"] = output
+                    if '---PS---' in output:
+                        try:
+                            ps_out = output.split('---PS---')[1].split('---')[0].strip()
+                            for line in ps_out.split('\n'):
+                                if line.strip():
+                                    try:
+                                        c = json.loads(line)
+                                        result["runtime"]["containers"].append({
+                                            "id": c.get("ID", ""),
+                                            "image": c.get("Image", ""),
+                                            "status": c.get("Status", ""),
+                                            "name": c.get("Names", "")
+                                        })
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
+                elif invocation:
+                    result["message"] = f"SSM command executed but failed with status: {invocation['Status']}."
+                else:
+                    result["message"] = "SSM command sent but timed out waiting for results."
+                    
             except ClientError as e:
                 result["message"] = f"Failed to send SSM command: {str(e)}"
                 
             result["status"] = "success" if result["runtime"]["containers"] else "partial_success"
-            if not result["message"] and not result["runtime"]["containers"]:
-                 result["message"] = "Systems Manager is running, but no containers or workloads were found."
 
         except Exception as e:
             logger.error(f"Error fetching runtime for EC2 {instance_id}: {e}")

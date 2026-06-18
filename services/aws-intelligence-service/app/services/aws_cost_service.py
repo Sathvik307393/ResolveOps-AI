@@ -9,10 +9,13 @@ class AWSCostService:
     def __init__(self, auth_kwargs: Dict):
         self.auth_kwargs = auth_kwargs
 
-    def get_resource_cost(self, resource_arn: str, region: str) -> Dict:
+    def get_resource_cost(self, resource: Dict) -> Dict:
         """
         Fetches the actual billed cost and estimated running price for a resource.
         """
+        resource_arn = resource.get('arn', '')
+        region = resource.get('region', 'us-east-1')
+        
         result = {
             "actual_cost": {
                 "status": "unavailable",
@@ -77,5 +80,39 @@ class AWSCostService:
                 logger.error(f"Failed to fetch cost for {resource_arn}: {e}")
 
         # In a real scenario, we'd query the AWS Pricing API to populate 'estimated_running_price'
-        # For this prototype we will leave it as unavailable to avoid hardcoded arbitrary numbers.
+        # For this prototype we will use a heuristic fallback.
+        res_type = resource.get("resource_type", "")
+        if "EC2" in res_type and "Instance" in res_type:
+            meta = resource.get("metadata", {})
+            instance_type = meta.get("instance_type", "unknown")
+            state = resource.get("status", "").lower()
+            
+            hourly_rate = 0.05
+            if "t2.micro" in instance_type or "t3.micro" in instance_type:
+                hourly_rate = 0.0116
+            elif "t3.medium" in instance_type:
+                hourly_rate = 0.0416
+            elif "m5.large" in instance_type:
+                hourly_rate = 0.096
+                
+            if state == "running":
+                result['estimated_running_price'].update({
+                    "status": "available",
+                    "hourly": round(hourly_rate, 4),
+                    "daily": round(hourly_rate * 24, 2),
+                    "monthly": round(hourly_rate * 730, 2),
+                    "confidence": "heuristic fallback",
+                    "source": "Estimated based on Instance Type"
+                })
+            else:
+                result['estimated_running_price'].update({
+                    "status": "available",
+                    "hourly": 0.0,
+                    "daily": 0.0,
+                    "monthly": 0.0,
+                    "confidence": "heuristic fallback",
+                    "source": "Estimated based on Instance Type",
+                    "warnings": ["Instance is not running, compute cost is $0."]
+                })
+        
         return result
