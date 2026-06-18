@@ -40,37 +40,51 @@ export default function AwsResourceDetailPage() {
       const resData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}`).catch(() => null);
       if (resData) setResource(resData);
       
-      const costData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/cost`).catch(() => null);
-      if (costData) setCost(costData);
+      const costData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/cost`).catch((e) => ({
+        status: "error", message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load cost data."
+      }));
+      setCost(costData);
 
-      const risksData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/risks`).catch(() => []);
-      if (risksData) setRisks(risksData.risks || []);
+      const risksData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/risks`).catch((e) => ({
+        status: "error", risks: [], message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load risks."
+      }));
+      setRisks(risksData.risks || []);
 
-      const logsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/logs`).catch(() => null);
-      if (logsData) {
-        setLogs(logsData.logs || []);
-        setLogsStatus({
-            available: logsData.logs_available,
-            message: logsData.message,
-            warnings: logsData.warnings || []
-        });
-      }
+      const logsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/logs`).catch((e) => ({
+        status: "error", logs: [], message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load logs."
+      }));
+      setLogs(logsData.logs || []);
+      setLogsStatus({
+          available: logsData.logs_available || false,
+          message: logsData.message || (logsData.status === "error" ? logsData.message : ""),
+          warnings: logsData.warnings || []
+      });
 
-      const metricsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/metrics`).catch(() => null);
-      if (metricsData) setMetrics(metricsData.metrics || null);
+      const metricsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/metrics`).catch((e) => ({
+        status: "error", metrics: null, message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load metrics."
+      }));
+      setMetrics(metricsData.metrics || null);
 
-      const eventsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/events`).catch(() => []);
-      if (eventsData) setEvents(eventsData.events || []);
+      const eventsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/events`).catch((e) => ({
+        status: "error", events: [], message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load events."
+      }));
+      setEvents(eventsData.events || []);
 
-      const relsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/relationships`).catch(() => []);
-      if (relsData) setRelationships(relsData.relationships || []);
+      const relsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/relationships`).catch((e) => ({
+        status: "error", relationships: [], message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load relationships."
+      }));
+      setRelationships(relsData.relationships || []);
 
-      const subData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/subresources`).catch(() => null);
-      if (subData) setSubresources(subData);
+      const subData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/subresources`).catch((e) => ({
+        status: "error", subresources: null, message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load subresources."
+      }));
+      setSubresources(subData);
 
       if (resData?.resource_type?.includes("EC2")) {
-          const runData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/runtime`).catch(() => null);
-          if (runData) setRuntime(runData);
+          const runData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/runtime`).catch((e) => ({
+            status: "error", message: e?.status === 404 ? "AWS detail endpoint not found. Check backend route mapping." : "Failed to load runtime."
+          }));
+          setRuntime(runData);
       }
 
 
@@ -247,6 +261,11 @@ export default function AwsResourceDetailPage() {
                 <DollarSign className="w-5 h-5 text-emerald-400" /> Cost Intelligence
               </h3>
               {cost ? (
+                cost.status === "error" || cost.status === "unavailable" ? (
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
+                    {cost.message || "Cost intelligence is unavailable."}
+                  </div>
+                ) : (
                 <div className="space-y-4">
                   {cost.actual_cost?.status === "permission_required" ? (
                     <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
@@ -272,7 +291,7 @@ export default function AwsResourceDetailPage() {
                        <p key={i} className="text-xs text-amber-400 mt-1">{w}</p>
                     ))}
                   </div>
-                </div>
+                )
               ) : (
                 <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
                   Loading cost intelligence...
