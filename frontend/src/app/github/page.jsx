@@ -17,6 +17,7 @@ export default function GitHubSyncHub() {
   const [workflows, setWorkflows] = useState([]);
   const [diagnoseModal, setDiagnoseModal] = useState({ isOpen: false });
   const [errorMsg, setErrorMsg] = useState(null);
+  const [warningMsgs, setWarningMsgs] = useState([]);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -47,6 +48,34 @@ export default function GitHubSyncHub() {
     }
   };
 
+  const applySyncResponse = (res) => {
+    // Directly apply sync response data to state
+    if (res.repositories && res.repositories.length > 0) {
+      setRepos(res.repositories);
+    }
+    if (res.workflows && res.workflows.length > 0) {
+      setWorkflows(res.workflows);
+    }
+    if (res.runs && res.runs.length > 0) {
+      // Sort runs by created_at descending
+      const sortedRuns = [...res.runs].sort((a, b) =>
+        (b.created_at || "").localeCompare(a.created_at || "")
+      );
+      setRuns(sortedRuns);
+    }
+    // Build summary from sync response
+    setSummary({
+      total: res.workflow_runs_count || 0,
+      failed: res.failed_runs_count || 0,
+      success: res.successful_runs_count || 0,
+      in_progress: res.in_progress_runs_count || 0,
+    });
+    // Handle warnings
+    if (res.warnings && res.warnings.length > 0) {
+      setWarningMsgs(res.warnings.map((w) => w.message || w));
+    }
+  };
+
   const fetchGithubData = async () => {
     try {
       const [reposRes, workflowsRes, runsRes] = await Promise.all([
@@ -63,20 +92,63 @@ export default function GitHubSyncHub() {
       }
     } catch (e) {
       console.error(e);
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const performSync = async () => {
+    try {
+      const res = await fetchApi("/api/v1/github/sync", { method: "POST" });
+
+      if (res.status === "permission_required") {
+        setErrorMsg(res.message || "GitHub PAT does not have permission to read Actions workflow runs.");
+        return false;
+      }
+
+      // Apply sync response data directly
+      if (res.connected !== false) {
+        applySyncResponse(res);
+
+        // Handle connected_no_repositories status
+        if (res.status === "connected_no_repositories") {
+          setErrorMsg(null); // Not an error, just a warning
+          setWarningMsgs(res.warnings?.map((w) => w.message || w) || [
+            "GitHub token is valid, but no repositories are accessible. Check fine-grained PAT repository access and Actions permissions."
+          ]);
+        }
+        return true;
+      } else {
+        setErrorMsg(res.message || "Sync failed");
+        return false;
+      }
+    } catch (e) {
+      if (e.message?.includes("invalid") || e.status === 401) {
+        setErrorMsg("GitHub token is invalid or expired.");
+      } else if (e.message?.includes("permission") || e.status === 403) {
+        setErrorMsg("GitHub token does not have permission to read repositories or Actions workflows.");
+      } else {
+        setErrorMsg(e.message || "Sync failed");
+      }
+      return false;
     }
   };
 
   const init = async () => {
     setLoading(true);
     setErrorMsg(null);
+    setWarningMsgs([]);
     const isConnected = await fetchStatus();
     if (isConnected) {
+      // Try fetching cached data first
       await fetchGithubData();
-    } else {
-      setLoading(false);
+
+      // If no data in cache, auto-trigger a sync
+      if (repos.length === 0 && runs.length === 0) {
+        setSyncing(true);
+        await performSync();
+        setSyncing(false);
+      }
     }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -91,24 +163,9 @@ export default function GitHubSyncHub() {
   const handleForceSync = async () => {
     setSyncing(true);
     setErrorMsg(null);
-    try {
-      const res = await fetchApi("/api/v1/github/sync", { method: "POST" });
-      if (res.status === "permission_required") {
-        setErrorMsg(res.message || "GitHub PAT does not have permission to read Actions workflow runs.");
-      } else {
-        await init();
-      }
-    } catch (e) {
-      if (e.message?.includes("invalid") || e.status === 401) {
-        setErrorMsg("GitHub token is invalid or expired.");
-      } else if (e.message?.includes("permission") || e.status === 403) {
-        setErrorMsg("GitHub token does not have permission to read repositories or Actions workflows.");
-      } else {
-        setErrorMsg(e.message || "Sync failed");
-      }
-    } finally {
-      setSyncing(false);
-    }
+    setWarningMsgs([]);
+    await performSync();
+    setSyncing(false);
   };
 
   const handleDiagnose = async (repository, workflow_run_id) => {
@@ -133,7 +190,9 @@ export default function GitHubSyncHub() {
             <div className="absolute inset-0 bg-purple-500 blur-xl opacity-50 rounded-full animate-pulse"></div>
             <Activity className="animate-spin text-purple-400 w-12 h-12 relative z-10" />
           </div>
-          <p className="text-slate-400 font-mono text-sm tracking-widest uppercase">Initializing GitHub Intelligence...</p>
+          <p className="text-slate-400 font-mono text-sm tracking-widest uppercase">
+            {syncing ? "Syncing GitHub Repositories..." : "Initializing GitHub Intelligence..."}
+          </p>
         </div>
       </DashboardLayout>
     );
@@ -142,8 +201,10 @@ export default function GitHubSyncHub() {
   const getEmptyStateMessage = () => {
     if (errorMsg) return errorMsg;
     if (!statusData) return "Connect your GitHub PAT in Integrations.";
+    if (warningMsgs.length > 0) return warningMsgs[0];
     if (repos.length > 0 && workflows.length === 0) return "Repositories found, but no GitHub Actions workflows were detected.";
     if (workflows.length > 0 && runs.length === 0) return "Workflows found, but no recent workflow runs were found.";
+    if (statusData && repos.length === 0) return "Connected to GitHub, but no repositories are accessible with this token.";
     return "No repositories found for this GitHub account.";
   };
 
@@ -176,6 +237,15 @@ export default function GitHubSyncHub() {
               <p className="text-sm text-rose-400 mt-2 p-2 bg-rose-500/10 border border-rose-500/20 rounded max-w-xl">
                 {errorMsg}
               </p>
+            )}
+            {warningMsgs.length > 0 && !errorMsg && (
+              <div className="mt-2 space-y-1 max-w-xl">
+                {warningMsgs.map((msg, i) => (
+                  <p key={i} className="text-sm text-amber-400 p-2 bg-amber-500/10 border border-amber-500/20 rounded flex items-center gap-2">
+                    <AlertTriangle size={14} className="shrink-0" /> {msg}
+                  </p>
+                ))}
+              </div>
             )}
           </div>
           <button
@@ -245,12 +315,12 @@ export default function GitHubSyncHub() {
               {/* Data Rows */}
               <div className="divide-y divide-slate-800/50">
                 {runs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((run, i) => {
-                  const repoParts = run.repository.split('/');
+                  const repoParts = (run.repository || "").split('/');
                   const repoOwner = repoParts[0];
                   const repoName = repoParts[1] || run.repository;
 
                   return (
-                    <div key={i} className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-white/[0.04] transition-colors group cursor-default">
+                    <div key={run.id || i} className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-white/[0.04] transition-colors group cursor-default">
                       {/* Repo & Workflow */}
                       <div className="col-span-3 flex flex-col justify-center truncate pl-2">
                         <span className="font-bold text-sm text-slate-200 flex items-center gap-2">

@@ -2319,5 +2319,23 @@ async def github_run_rca_proxy(run_id: str, req: Request, current_user: dict = D
         return JSONResponse(status_code=400, content={"message": res.text})
     return res.json()
 
+@app.post("/api/v1/github/workflows/{owner}/{repo}/{workflow_id}/dispatch")
+async def github_workflow_dispatch_proxy(owner: str, repo: str, workflow_id: str, req: Request, current_user: dict = Depends(get_current_user)):
+    import requests
+    pat = get_github_token_for_tenant(current_user.get("email"))
+    if not pat:
+        return JSONResponse(status_code=400, content={"message": "GitHub PAT is not connected."})
+    headers = {"X-GitHub-Token": pat}
+    try:
+        data = await req.json()
+    except Exception:
+        data = {"ref": "main"}
+    res = requests.post(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/workflows/{owner}/{repo}/{workflow_id}/dispatch", json=data, headers=headers, timeout=30)
+    if res.status_code in [401, 403]:
+        return JSONResponse(status_code=400, content={"message": "GitHub PAT does not have workflow dispatch permission."})
+    if res.status_code != 200:
+        return JSONResponse(status_code=res.status_code, content={"message": res.text})
+    return res.json()
+
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

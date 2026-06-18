@@ -51,11 +51,11 @@ db = GitHubDataRepository()
 def get_github_headers(token: str):
     return {
         "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github.v3+json",
+        "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28"
     }
 
-def fetch_paginated(url: str, token: str, max_pages: int = 5):
+def fetch_paginated(url: str, token: str, max_pages: int = 10):
     headers = get_github_headers(token)
     results = []
     page = 1
@@ -73,16 +73,59 @@ def fetch_paginated(url: str, token: str, max_pages: int = 5):
                 elif "workflow_runs" in data:
                     results.extend(data["workflow_runs"])
             
-            # Check for next page
+            # Check for next page via Link header
             if "next" in res.links:
                 url = res.links["next"]["url"]
                 page += 1
             else:
                 break
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching {url}: {e}")
+            logger.error(f"Error fetching paginated data: {e}")
             break
     return results
+
+def normalize_repo(repo: dict) -> dict:
+    """Normalize a GitHub API repo object to the standard schema."""
+    return {
+        "id": str(repo.get("id", "")),
+        "name": repo.get("name", ""),
+        "full_name": repo.get("full_name", ""),
+        "owner": repo.get("owner", {}).get("login", ""),
+        "private": repo.get("private", False),
+        "html_url": repo.get("html_url", ""),
+        "default_branch": repo.get("default_branch", "main"),
+        "updated_at": repo.get("updated_at", "")
+    }
+
+def normalize_workflow(wf: dict, repo_full_name: str) -> dict:
+    """Normalize a GitHub API workflow object to the standard schema."""
+    return {
+        "id": str(wf.get("id", "")),
+        "repository": repo_full_name,
+        "name": wf.get("name", ""),
+        "path": wf.get("path", ""),
+        "state": wf.get("state", ""),
+        "html_url": wf.get("html_url", "")
+    }
+
+def normalize_run(r: dict, repo_full_name: str, owner: str) -> dict:
+    """Normalize a GitHub API workflow run object to the standard schema."""
+    return {
+        "id": str(r.get("id", "")),
+        "repository": repo_full_name,
+        "owner": owner,
+        "workflow_name": r.get("name", ""),
+        "workflow_id": str(r.get("workflow_id", "")),
+        "branch": r.get("head_branch", ""),
+        "status": r.get("status", ""),
+        "conclusion": r.get("conclusion") or r.get("status", ""),
+        "event": r.get("event", ""),
+        "run_number": str(r.get("run_number", "")),
+        "created_at": r.get("created_at", ""),
+        "updated_at": r.get("updated_at", ""),
+        "html_url": r.get("html_url", ""),
+        "logs_available": True
+    }
 
 @app.get("/health")
 def health_check():
@@ -93,6 +136,7 @@ def github_status(x_github_token: Optional[str] = Header(None)):
     if not x_github_token:
         raise HTTPException(status_code=401, detail="GitHub PAT is missing")
     
+    logger.info(f"GitHub status check: token found = True")
     headers = get_github_headers(x_github_token)
     try:
         res = requests.get("https://api.github.com/user", headers=headers, timeout=10)
@@ -103,10 +147,12 @@ def github_status(x_github_token: Optional[str] = Header(None)):
         res.raise_for_status()
         user_data = res.json()
         
-        # Check permissions by looking at headers if needed, for now just returning success
+        username = user_data.get("login")
+        logger.info(f"GitHub status: connected as {username}")
+        
         return {
             "status": "connected",
-            "username": user_data.get("login"),
+            "username": username,
             "name": user_data.get("name"),
             "avatar_url": user_data.get("avatar_url")
         }
@@ -121,6 +167,7 @@ def sync_github(x_github_token: Optional[str] = Header(None)):
     if not x_github_token:
         raise HTTPException(status_code=401, detail="GitHub PAT is missing")
     
+    logger.info("GitHub sync: starting sync process, token found = True")
     headers = get_github_headers(x_github_token)
     warnings = []
     
@@ -132,75 +179,98 @@ def sync_github(x_github_token: Optional[str] = Header(None)):
         user_res.raise_for_status()
         user_data = user_res.json()
         username = user_data.get("login")
+        logger.info(f"GitHub sync: authenticated as {username}")
     except requests.exceptions.HTTPError as e:
         raise HTTPException(status_code=e.response.status_code, detail="GitHub API error validating token.")
 
-    # 2. Fetch Repositories
-    repos = fetch_paginated("https://api.github.com/user/repos?per_page=100", x_github_token)
+    # 2. Fetch Repositories (with visibility and affiliation for fine-grained PAT support)
+    raw_repos = fetch_paginated(
+        "https://api.github.com/user/repos?per_page=100&visibility=all&affiliation=owner,collaborator,organization_member",
+        x_github_token
+    )
+    logger.info(f"GitHub sync: repositories fetched = {len(raw_repos)}")
     
-    workflows = []
-    runs = []
+    # Normalize repos
+    repos_normalized = [normalize_repo(r) for r in raw_repos]
+    
+    workflows_normalized = []
+    runs_normalized = []
     
     # 3 & 4. Fetch Workflows and Runs per repo
-    for repo in repos:
+    for repo in raw_repos:
         repo_full_name = repo.get("full_name")
         owner = repo.get("owner", {}).get("login")
         repo_name = repo.get("name")
         
         # Fetch workflows
-        repo_workflows = fetch_paginated(f"https://api.github.com/repos/{owner}/{repo_name}/actions/workflows?per_page=100", x_github_token)
-        workflows.extend(repo_workflows)
+        try:
+            raw_workflows = fetch_paginated(
+                f"https://api.github.com/repos/{owner}/{repo_name}/actions/workflows?per_page=100",
+                x_github_token
+            )
+            for wf in raw_workflows:
+                workflows_normalized.append(normalize_workflow(wf, repo_full_name))
+        except Exception as e:
+            logger.error(f"GitHub sync: error fetching workflows for {repo_full_name}: {e}")
+            warnings.append({"message": f"Could not fetch workflows for {repo_full_name}"})
         
-        # Fetch runs (fetch only 1 page per repo to save time/rate limits, or use pagination)
-        repo_runs = fetch_paginated(f"https://api.github.com/repos/{owner}/{repo_name}/actions/runs?per_page=50", x_github_token, max_pages=2)
-        
-        for r in repo_runs:
-            runs.append({
-                "id": str(r.get("id")),
-                "repository": repo_full_name,
-                "owner": owner,
-                "workflow_name": r.get("name"),
-                "workflow_id": str(r.get("workflow_id")),
-                "branch": r.get("head_branch"),
-                "status": r.get("status"),
-                "conclusion": r.get("conclusion") or r.get("status"),
-                "event": r.get("event"),
-                "run_number": str(r.get("run_number")),
-                "created_at": r.get("created_at"),
-                "updated_at": r.get("updated_at"),
-                "html_url": r.get("html_url"),
-                "logs_available": True
-            })
+        # Fetch runs (limit pages per repo to avoid rate limits)
+        try:
+            raw_runs = fetch_paginated(
+                f"https://api.github.com/repos/{owner}/{repo_name}/actions/runs?per_page=50",
+                x_github_token,
+                max_pages=2
+            )
+            for r in raw_runs:
+                runs_normalized.append(normalize_run(r, repo_full_name, owner))
+        except Exception as e:
+            logger.error(f"GitHub sync: error fetching runs for {repo_full_name}: {e}")
+            warnings.append({"message": f"Could not fetch workflow runs for {repo_full_name}"})
+
+    logger.info(f"GitHub sync: workflows fetched = {len(workflows_normalized)}")
+    logger.info(f"GitHub sync: workflow runs fetched = {len(runs_normalized)}")
 
     # Save to "DB"
-    db.save_sync_data(x_github_token, user_data, repos, workflows, runs, warnings)
+    db.save_sync_data(x_github_token, user_data, repos_normalized, workflows_normalized, runs_normalized, warnings)
     
-    failed_runs = sum(1 for r in runs if r["conclusion"] == "failure")
-    success_runs = sum(1 for r in runs if r["conclusion"] == "success")
-    in_progress = sum(1 for r in runs if r["status"] in ["in_progress", "queued", "pending"])
+    failed_runs = sum(1 for r in runs_normalized if r["conclusion"] == "failure")
+    success_runs = sum(1 for r in runs_normalized if r["conclusion"] == "success")
+    in_progress = sum(1 for r in runs_normalized if r["status"] in ["in_progress", "queued", "pending"])
     
-    status_str = "partial_success" if warnings else "success"
-    if not repos:
-        warnings.append({"message": "No repositories found for this GitHub account."})
+    # Determine status
+    if not raw_repos:
+        status_str = "connected_no_repositories"
+        warnings.append({
+            "message": "GitHub token is valid, but no repositories are accessible. Check fine-grained PAT repository access and Actions permissions."
+        })
+    elif not workflows_normalized:
         status_str = "partial_success"
-    elif not workflows:
         warnings.append({"message": "Repositories found, but no GitHub Actions workflows were detected."})
+    elif not runs_normalized:
         status_str = "partial_success"
-    elif not runs:
         warnings.append({"message": "Workflows found, but no recent workflow runs were found."})
+    elif warnings:
         status_str = "partial_success"
+    else:
+        status_str = "success"
+
+    logger.info(f"GitHub sync: complete. status={status_str}, warnings={len(warnings)}")
 
     return {
         "status": status_str,
-        "github_user": username,
-        "repositories_count": len(repos),
-        "workflows_count": len(workflows),
-        "workflow_runs_count": len(runs),
+        "connected": True,
+        "username": username,
+        "repositories_count": len(repos_normalized),
+        "workflows_count": len(workflows_normalized),
+        "workflow_runs_count": len(runs_normalized),
         "failed_runs_count": failed_runs,
         "successful_runs_count": success_runs,
         "in_progress_runs_count": in_progress,
-        "last_synced_at": datetime.datetime.utcnow().isoformat() + "Z",
-        "warnings": warnings
+        "repositories": repos_normalized,
+        "workflows": workflows_normalized,
+        "runs": runs_normalized,
+        "warnings": warnings,
+        "last_synced_at": datetime.datetime.utcnow().isoformat() + "Z"
     }
 
 @app.get("/api/v1/github/repos")
@@ -221,9 +291,9 @@ def get_runs(x_github_token: Optional[str] = Header(None)):
     runs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
     
     # Compute counts
-    failed_runs = sum(1 for r in runs if r["conclusion"] == "failure")
-    success_runs = sum(1 for r in runs if r["conclusion"] == "success")
-    in_progress = sum(1 for r in runs if r["status"] in ["in_progress", "queued", "pending"])
+    failed_runs = sum(1 for r in runs if r.get("conclusion") == "failure")
+    success_runs = sum(1 for r in runs if r.get("conclusion") == "success")
+    in_progress = sum(1 for r in runs if r.get("status") in ["in_progress", "queued", "pending"])
     
     return {
         "runs": runs,
@@ -318,3 +388,33 @@ def generate_rca(run_id: str, req: RCARequest, x_github_token: Optional[str] = H
     except Exception as e:
         logger.error(f"RCA generation failed: {e}")
         return {"status": "partial_success", "diagnosis": "AI RCA is unavailable because Amazon Bedrock model access or billing is not configured. GitHub workflow data is still available.", "raw_logs": raw_logs}
+
+class DispatchRequest(BaseModel):
+    ref: str = "main"
+
+@app.post("/api/v1/github/workflows/{owner}/{repo}/{workflow_id}/dispatch")
+def dispatch_workflow(owner: str, repo: str, workflow_id: str, req: DispatchRequest, x_github_token: Optional[str] = Header(None)):
+    """Triggers a GitHub Actions workflow dispatch."""
+    if not x_github_token:
+        raise HTTPException(status_code=401, detail="GitHub PAT is missing")
+    
+    headers = get_github_headers(x_github_token)
+    dispatch_url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches"
+    
+    try:
+        res = requests.post(dispatch_url, json={"ref": req.ref}, headers=headers, timeout=15)
+        
+        if res.status_code == 204:
+            logger.info(f"Workflow dispatch: triggered {workflow_id} on {owner}/{repo} ref={req.ref}")
+            return {"status": "success", "message": f"Workflow {workflow_id} dispatched on branch {req.ref}"}
+        elif res.status_code == 403:
+            return {"status": "permission_required", "message": "Workflow dispatch permission is required. Ensure your PAT has the 'actions:write' or 'workflow' permission."}
+        elif res.status_code == 404:
+            return {"status": "not_found", "message": "Workflow not found or dispatch is not enabled for this workflow."}
+        elif res.status_code == 422:
+            return {"status": "error", "message": f"Unprocessable: {res.text}"}
+        else:
+            return {"status": "error", "message": f"GitHub API returned {res.status_code}: {res.text}"}
+    except Exception as e:
+        logger.error(f"Workflow dispatch error: {e}")
+        raise HTTPException(status_code=500, detail=f"Workflow dispatch failed: {str(e)}")
