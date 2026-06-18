@@ -158,6 +158,7 @@ export default function AwsResourceDetailPage() {
               Generate AI RCA
             </button>
           </div>
+        </div>
 
         {/* Resource Summary Header */}
         <div className="glass-panel p-6 rounded-xl border border-slate-700/50 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
