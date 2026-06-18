@@ -365,11 +365,24 @@ export default function IntegrationsManager() {
               <p className="text-sm text-slate-400 leading-relaxed">
                 Provide Service Principal credentials to authorize resource discovery and log analytics querying.
               </p>
-              <div className="bg-sky-500/10 border border-sky-500/20 p-3 rounded-lg flex items-start gap-2">
-                <ShieldCheck className="text-sky-400 mt-0.5" size={16} shrink-0 />
-                <p className="text-xs text-sky-200">
-                  <strong className="text-sky-300">Note for AKS:</strong> To securely view internal Kubernetes workloads, ensure the Service Principal is assigned the <strong>Azure Kubernetes Service Cluster User Role</strong>. Do not use the Admin role for security reasons.
-                </p>
+              <div className="bg-sky-500/10 border border-sky-500/20 p-3 rounded-lg flex flex-col gap-2">
+                <div className="flex items-start gap-2">
+                  <ShieldCheck className="text-sky-400 mt-0.5" size={16} shrink-0 />
+                  <p className="text-xs text-sky-200">
+                    <strong className="text-sky-300">Note for AKS:</strong> To securely view internal Kubernetes workloads, ensure the Service Principal is assigned the <strong>Azure Kubernetes Service Cluster User Role</strong>. Do not use the Admin role for security reasons.
+                  </p>
+                </div>
+                <div className="flex items-start gap-2 pt-2 border-t border-sky-500/20">
+                  <Key className="text-sky-400 mt-0.5" size={16} shrink-0 />
+                  <div className="text-xs text-sky-200">
+                    <strong className="text-sky-300">Permission Requirements:</strong>
+                    <ul className="list-disc ml-4 mt-1 space-y-1">
+                      <li>Go to <strong>Subscriptions</strong> in the Azure Portal and select your subscription.</li>
+                      <li>Click <strong>Access control (IAM)</strong> &gt; <strong>Add role assignment</strong>.</li>
+                      <li>Assign the <strong>Reader</strong> or <strong>Contributor</strong> role to your Service Principal (Client ID).</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
               
               <div className="space-y-4">
