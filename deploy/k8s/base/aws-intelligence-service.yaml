@@ -18,7 +18,7 @@ spec:
       serviceAccountName: resolveops-service-account
       containers:
         - name: aws-intelligence-service
-          image: <ACR_LOGIN_SERVER>/aws-intelligence-service:dev
+          image: reolveopsai.azurecr.io/aws-intelligence-service:dev
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

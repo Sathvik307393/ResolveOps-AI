@@ -3,6 +3,7 @@ import os
 import json
 import smtplib
 import logging
+import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -34,10 +35,9 @@ logger.info(f"SMTP Password present: {bool(SMTP_PASSWORD)}")
 logger.info("==========================")
 
 def _send_smtp(recipient: str, subject: str, html_body: str) -> bool:
-    """Send an email via SMTP (Gmail / any SMTP provider)."""
+    """Send an email via SMTP (Gmail / any SMTP provider) with retry logic."""
     if not SMTP_USER or not SMTP_PASSWORD:
         logger.warning(f"SMTP not configured. MOCK EMAIL to {recipient}: {subject}")
-        # Write to a local mock file as fallback
         try:
             with open("local_emails_mock.json", "a") as f:
                 f.write(json.dumps({"to": recipient, "subject": subject}) + "\n")
@@ -45,24 +45,37 @@ def _send_smtp(recipient: str, subject: str, html_body: str) -> bool:
             pass
         return True
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"ResolveOps Support <{SENDER_EMAIL}>"
-        msg["To"] = recipient
-        msg.attach(MIMEText(html_body, "html"))
+    retries = 3
+    while retries > 0:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = f"ResolveOps Support <{SENDER_EMAIL}>"
+            msg["To"] = recipient
+            msg.attach(MIMEText(html_body, "html"))
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls()
+            # Auto-detect security: Port 465 is typically SSL, 587 is STARTTLS
+            if SMTP_PORT == 465:
+                server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
+            else:
+                server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(SENDER_EMAIL, [recipient], msg.as_string())
+            server.quit()
 
-        logger.info(f"SMTP email sent to {recipient}: {subject}")
-        return True
-    except Exception as e:
-        logger.error(f"SMTP send failed: {e}")
-        return False
+            logger.info(f"SMTP email sent to {recipient}: {subject}")
+            return True
+        except Exception as e:
+            retries -= 1
+            logger.warning(f"SMTP attempt failed ({3 - retries}/3): {e}")
+            time.sleep(2)
+            if retries == 0:
+                logger.error(f"SMTP send failed after retries: {e}")
+    return False
 
 
 def _html_wrapper(title: str, body_html: str) -> str:

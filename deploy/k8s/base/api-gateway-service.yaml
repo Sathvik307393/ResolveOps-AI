@@ -18,7 +18,7 @@ spec:
       serviceAccountName: resolveops-service-account
       containers:
         - name: api-gateway-service
-          image: <ACR_LOGIN_SERVER>/api-gateway-service:dev
+          image: reolveopsai.azurecr.io/api-gateway-service:dev
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
