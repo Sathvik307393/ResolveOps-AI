@@ -12,6 +12,7 @@ class AWSConnectRequest(BaseModel):
     external_id: Optional[str] = None
     access_key_id: Optional[str] = None
     secret_access_key: Optional[str] = None
+    session_token: Optional[str] = None
     default_region: Optional[str] = Field(default=None)
     region: Optional[str] = Field(default=None, description="Alias for default_region")
     regions: Optional[List[str]] = Field(default=None, description="Alias for enabled_regions")
@@ -47,6 +48,7 @@ def connect_aws_account(payload: AWSConnectRequest = Body(...)):
         auth_method=payload.auth_method,
         access_key_id=payload.access_key_id,
         secret_access_key=payload.secret_access_key,
+        session_token=payload.session_token,
         role_arn=payload.role_arn,
         external_id=payload.external_id,
         region=payload.default_region

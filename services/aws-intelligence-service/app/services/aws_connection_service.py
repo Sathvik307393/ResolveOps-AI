@@ -11,6 +11,7 @@ class AWSConnectionService:
         auth_method: str,
         access_key_id: Optional[str] = None,
         secret_access_key: Optional[str] = None,
+        session_token: Optional[str] = None,
         role_arn: Optional[str] = None,
         external_id: Optional[str] = None,
         region: str = "us-east-1"
@@ -20,6 +21,16 @@ class AWSConnectionService:
         Returns a tuple of (success_boolean, result_data_or_error_dict).
         """
         try:
+            if access_key_id: access_key_id = access_key_id.strip()
+            if secret_access_key: secret_access_key = secret_access_key.strip()
+            if session_token: session_token = session_token.strip()
+            if region: region = region.strip()
+            
+            # Safe debug logging
+            safe_ak = f"*{access_key_id[-4:]}" if access_key_id and len(access_key_id) >= 4 else "None"
+            secret_len = len(secret_access_key) if secret_access_key else 0
+            logger.info(f"Validating AWS connection. Access Key ID: {safe_ak}, Region: {region}, Session Token present: {bool(session_token)}, Secret Length: {secret_len}")
+
             if auth_method == "access_keys":
                 if not access_key_id or not secret_access_key:
                     return False, {"error": "Access Key ID and Secret Access Key are required for access_keys method."}
@@ -28,6 +39,7 @@ class AWSConnectionService:
                     'sts',
                     aws_access_key_id=access_key_id,
                     aws_secret_access_key=secret_access_key,
+                    aws_session_token=session_token,
                     region_name=region
                 )
                 
@@ -70,8 +82,33 @@ class AWSConnectionService:
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')
             error_msg = e.response.get('Error', {}).get('Message', str(e))
-            logger.error(f"AWS STS validation failed: {error_code} - {error_msg}")
+            logger.error(f"AWS STS validation failed: {error_code}")
             
+            if error_code == "SignatureDoesNotMatch":
+                return False, {
+                    "error": "Authentication failed. Please verify your credentials and permissions.",
+                    "details": "The request signature we calculated does not match the signature you provided. Check your AWS Secret Access Key and signing method.",
+                    "code": error_code
+                }
+            elif error_code == "InvalidClientTokenId":
+                return False, {
+                    "error": "Authentication failed. The Access Key ID is invalid.",
+                    "details": "The security token included in the request is invalid.",
+                    "code": error_code
+                }
+            elif error_code == "ExpiredToken":
+                return False, {
+                    "error": "Authentication failed. Temporary credentials expired.",
+                    "details": "The session token provided has expired or is invalid.",
+                    "code": error_code
+                }
+            elif error_code == "AccessDenied":
+                return False, {
+                    "error": "Authentication failed. Access Denied.",
+                    "details": "The IAM user or role lacks permissions to perform STS operations.",
+                    "code": error_code
+                }
+                
             return False, {
                 "error": "Authentication failed. Please verify your credentials and permissions.",
                 "details": error_msg,

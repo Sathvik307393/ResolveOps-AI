@@ -20,7 +20,9 @@ export default function IntegrationsManager() {
   const [githubPat, setGithubPat] = useState("");
   const [awsAccessKey, setAwsAccessKey] = useState("");
   const [awsSecretKey, setAwsSecretKey] = useState("");
+  const [awsSessionToken, setAwsSessionToken] = useState("");
   const [awsRegion, setAwsRegion] = useState("us-east-1");
+  const [awsErrorModal, setAwsErrorModal] = useState({ show: false, code: "", message: "" });
   const [azureTenant, setAzureTenant] = useState("");
   const [azureClient, setAzureClient] = useState("");
   const [azureSecret, setAzureSecret] = useState("");
@@ -58,6 +60,31 @@ export default function IntegrationsManager() {
   }, [router]);
 
   const handleToggleConnect = async (service, isConnect, credentials) => {
+    // AWS specific validation before sending
+    if (service === "aws" && isConnect) {
+      if (!credentials.access_key_id) {
+        setAwsErrorModal({ show: true, code: "ValidationError", message: "Access Key ID is required." });
+        return;
+      }
+      if (!credentials.secret_access_key) {
+        setAwsErrorModal({ show: true, code: "ValidationError", message: "Secret Access Key is required." });
+        return;
+      }
+      if (!credentials.region) {
+        setAwsErrorModal({ show: true, code: "ValidationError", message: "Region is required." });
+        return;
+      }
+      const isPlaceholder = /^(•+|-+|\*+)$/.test(credentials.secret_access_key) || credentials.secret_access_key === "empty string";
+      if (isPlaceholder) {
+        setAwsErrorModal({ show: true, code: "ValidationError", message: "Please enter your actual Secret Access Key, not a masked placeholder." });
+        return;
+      }
+      if (credentials.access_key_id.startsWith("ASIA") && !credentials.session_token) {
+        setAwsErrorModal({ show: true, code: "ValidationError", message: "A Session Token is required for temporary AWS credentials (ASIA...)." });
+        return;
+      }
+    }
+
     try {
       const data = await fetchApi("/api/v1/integrations/connect", {
         method: "POST",
@@ -127,7 +154,17 @@ export default function IntegrationsManager() {
         console.debug("Connection error:", err);
       }
       
-      alert(message || "Failed to update integration connection");
+      if (service === "aws") {
+        const errCode = err?.detail?.code || err?.code || "AuthenticationError";
+        const errMsg = err?.detail?.details || err?.detail?.error || message || "Failed to update AWS integration";
+        setAwsErrorModal({ 
+           show: true, 
+           code: errCode, 
+           message: errMsg
+        });
+      } else {
+        alert(message || "Failed to update integration connection");
+      }
     }
   };
 
@@ -368,6 +405,18 @@ export default function IntegrationsManager() {
                     className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all font-mono"
                   />
                 </div>
+                {awsAccessKey.startsWith("ASIA") && (
+                  <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Session Token</label>
+                    <input
+                      type="password"
+                      value={awsSessionToken}
+                      onChange={(e) => setAwsSessionToken(e.target.value)}
+                      placeholder="IQoJb3JpZ2luX2VjEGoaCXVzLWVhc3QtMSJGMEQC..."
+                      className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all font-mono"
+                    />
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-3 pt-6 border-t border-slate-800/80">
                 <button
@@ -377,11 +426,38 @@ export default function IntegrationsManager() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleToggleConnect("aws", true, { access_key_id: awsAccessKey, secret_access_key: awsSecretKey, region: awsRegion })}
-                  disabled={!awsAccessKey || !awsSecretKey}
+                  onClick={() => handleToggleConnect("aws", true, { access_key_id: awsAccessKey, secret_access_key: awsSecretKey, region: awsRegion, session_token: awsSessionToken })}
+                  disabled={!awsAccessKey || !awsSecretKey || !awsRegion || (awsAccessKey.startsWith("ASIA") && !awsSessionToken)}
                   className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold uppercase tracking-wider px-5 py-3 rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg shadow-amber-500/20"
                 >
                   Authenticate
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* AWS Error Modal */}
+        {awsErrorModal.show && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-rose-500/50 w-full max-w-sm rounded-2xl overflow-hidden relative shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
+              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                <ShieldAlert className="text-rose-500 w-5 h-5" size={20} /> AWS authentication failed
+              </h3>
+              <p className="text-sm text-slate-300 leading-relaxed">
+                {awsErrorModal.message}
+              </p>
+              {awsErrorModal.code && (
+                <div className="bg-rose-500/10 border border-rose-500/20 p-2 rounded text-xs text-rose-400 font-mono">
+                  Technical code: {awsErrorModal.code}
+                </div>
+              )}
+              <div className="flex justify-end pt-4">
+                <button
+                  onClick={() => setAwsErrorModal({ show: false, code: "", message: "" })}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-slate-700"
+                >
+                  Close
                 </button>
               </div>
             </div>

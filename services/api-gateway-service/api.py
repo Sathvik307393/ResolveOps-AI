@@ -1207,6 +1207,8 @@ def update_integration_connection(req: ConnectionRequest, current_user: dict = D
                 "auth_method": "access_keys" if req.credentials.get("access_key_id") else "environment",
                 "access_key_id": req.credentials.get("access_key_id"),
                 "secret_access_key": req.credentials.get("secret_access_key"),
+                "session_token": req.credentials.get("session_token"),
+                "default_region": req.credentials.get("region", "us-east-1"),
                 "region": req.credentials.get("region", "us-east-1")
             }
             try:
