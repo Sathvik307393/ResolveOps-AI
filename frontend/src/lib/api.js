@@ -22,7 +22,14 @@ export async function fetchApi(endpoint, options = {}) {
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
+    let errorData = {};
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      errorData = await response.json().catch(() => ({}));
+    } else {
+      const text = await response.text().catch(() => "");
+      errorData = { message: text || `API Error: ${response.statusText}` };
+    }
 
     if (response.status === 401) {
       const isAuthEndpoint = path.startsWith('/v1/auth') || path === '/me' || path.includes('/auth/');
@@ -38,5 +45,9 @@ export async function fetchApi(endpoint, options = {}) {
     throw new Error(errorData.detail || errorData.message || `API Error: ${response.statusText}`);
   }
 
-  return response.json();
+  const contentType = response.headers.get("content-type");
+  if (contentType && contentType.includes("application/json")) {
+    return response.json();
+  }
+  return response.text();
 }
