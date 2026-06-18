@@ -66,9 +66,14 @@ export default function AwsHubPage() {
   const fetchAwsStatus = async () => {
     try {
       const res = await fetchApi("/api/v1/aws/status");
-      if (res && res.status === "connected") {
+      if (res && res.connected) {
         setStatus("connected");
-        setConnectionDetails(res.connection_details || {});
+        setConnectionDetails({
+          name: "AWS Connection",
+          account_id: res.account_id,
+          default_region: res.region,
+          auth_method: res.auth_method
+        });
         await fetchAwsResources();
       } else {
         setStatus("disconnected");
@@ -149,7 +154,14 @@ export default function AwsHubPage() {
         </div>
 
         {status === "disconnected" ? (
-          <AwsSetupGuide onConnect={fetchAwsStatus} />
+          <div className="glass-panel p-12 rounded-xl border border-slate-700/50 text-center">
+            <Cloud className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+            <h3 className="text-xl font-medium text-slate-200 mb-2">AWS is not connected.</h3>
+            <p className="text-slate-400 mb-6">Connect AWS in Integrations.</p>
+            <a href="/integrations" className="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-amber-950 font-semibold rounded-lg transition-colors">
+              Go to Integrations <ArrowRight className="w-4 h-4" />
+            </a>
+          </div>
         ) : (
           <div className="space-y-8">
             {warnings.length > 0 && (
@@ -175,211 +187,6 @@ export default function AwsHubPage() {
   );
 }
 
-function AwsSetupGuide({ onConnect }) {
-  const [authMethod, setAuthMethod] = useState("role_arn"); // role_arn or access_keys
-  const [formData, setFormData] = useState({
-    connection_name: "Production AWS",
-    role_arn: "",
-    external_id: "",
-    access_key_id: "",
-    secret_access_key: "",
-    default_region: "us-east-1"
-  });
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [error, setError] = useState(null);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsConnecting(true);
-    setError(null);
-    try {
-      await fetchApi("/api/v1/aws/connect", {
-        method: "POST",
-        body: JSON.stringify({
-          ...formData,
-          auth_method: authMethod,
-          enabled_regions: [formData.default_region]
-        })
-      });
-      onConnect();
-    } catch (err) {
-      setError(err.message || "Failed to validate AWS credentials.");
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <div className="lg:col-span-2">
-        <div className="glass-panel p-8 rounded-xl border border-slate-700/50">
-          <h2 className="text-xl font-bold text-slate-100 mb-6">Connect AWS Account</h2>
-          
-          <div className="flex gap-4 mb-6">
-            <button
-              onClick={() => setAuthMethod("role_arn")}
-              className={`flex-1 py-3 px-4 rounded-lg border text-sm font-medium transition-colors ${
-                authMethod === "role_arn" 
-                  ? "bg-amber-500/10 border-amber-500/50 text-amber-400" 
-                  : "bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800"
-              }`}
-            >
-              IAM Role (Recommended)
-            </button>
-            <button
-              onClick={() => setAuthMethod("access_keys")}
-              className={`flex-1 py-3 px-4 rounded-lg border text-sm font-medium transition-colors ${
-                authMethod === "access_keys" 
-                  ? "bg-amber-500/10 border-amber-500/50 text-amber-400" 
-                  : "bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800"
-              }`}
-            >
-              Access Keys (Demo Only)
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Connection Name</label>
-              <input
-                type="text"
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500"
-                value={formData.connection_name}
-                onChange={e => setFormData({...formData, connection_name: e.target.value})}
-                required
-              />
-            </div>
-
-            {authMethod === "role_arn" ? (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">IAM Role ARN</label>
-                  <input
-                    type="text"
-                    placeholder="arn:aws:iam::123456789012:role/ResolveOpsAIDiscoveryRole"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500 font-mono text-sm"
-                    value={formData.role_arn}
-                    onChange={e => setFormData({...formData, role_arn: e.target.value})}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">External ID (Optional)</label>
-                  <input
-                    type="text"
-                    placeholder="Secure external ID"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500 font-mono text-sm"
-                    value={formData.external_id}
-                    onChange={e => setFormData({...formData, external_id: e.target.value})}
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">AWS Access Key ID</label>
-                  <input
-                    type="text"
-                    placeholder="AKIA..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500 font-mono text-sm"
-                    value={formData.access_key_id}
-                    onChange={e => setFormData({...formData, access_key_id: e.target.value})}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">AWS Secret Access Key</label>
-                  <input
-                    type="password"
-                    placeholder="••••••••••••••••"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500 font-mono text-sm"
-                    value={formData.secret_access_key}
-                    onChange={e => setFormData({...formData, secret_access_key: e.target.value})}
-                    required
-                  />
-                </div>
-              </>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Default Region</label>
-              <select
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500"
-                value={formData.default_region}
-                onChange={e => setFormData({...formData, default_region: e.target.value})}
-              >
-                <option value="us-east-1">us-east-1 (N. Virginia)</option>
-                <option value="us-east-2">us-east-2 (Ohio)</option>
-                <option value="us-west-2">us-west-2 (Oregon)</option>
-                <option value="eu-west-1">eu-west-1 (Ireland)</option>
-                <option value="ap-south-1">ap-south-1 (Mumbai)</option>
-              </select>
-            </div>
-
-            {error && (
-              <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-sm flex items-start gap-3">
-                <ShieldAlert className="w-5 h-5 shrink-0" />
-                <p>{error}</p>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isConnecting}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-500 hover:bg-amber-400 text-amber-950 font-semibold rounded-lg transition-colors disabled:opacity-50"
-            >
-              {isConnecting ? (
-                <>
-                  <RefreshCw className="w-5 h-5 animate-spin" />
-                  Validating...
-                </>
-              ) : (
-                <>
-                  <Lock className="w-5 h-5" />
-                  Connect Securely
-                </>
-              )}
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <div className="space-y-6">
-        <div className="glass-panel p-6 rounded-xl border border-slate-700/50">
-          <h3 className="text-lg font-bold text-slate-100 mb-4">Required Permissions</h3>
-          <p className="text-sm text-slate-400 mb-4">
-            The provided IAM Role or User must have read access to the following AWS services for discovery to work:
-          </p>
-          <ul className="space-y-3">
-            {[
-              "EC2 & VPC (Describe*)",
-              "EKS (DescribeCluster)",
-              "RDS (DescribeDBInstances)",
-              "S3 (GetBucketLocation)",
-              "CloudWatch (GetMetricData)",
-              "Cost Explorer (GetCostAndUsage)"
-            ].map(perm => (
-              <li key={perm} className="flex items-center gap-3 text-sm text-slate-300">
-                <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
-                {perm}
-              </li>
-            ))}
-          </ul>
-        </div>
-        
-        <div className="p-6 bg-amber-500/5 border border-amber-500/20 rounded-xl">
-          <h4 className="text-amber-400 font-medium flex items-center gap-2 mb-2">
-            <ShieldAlert className="w-5 h-5" />
-            Security Note
-          </h4>
-          <p className="text-sm text-amber-500/80 leading-relaxed">
-            ResolveOps AI never stores your Secret Access Keys. We securely validate the connection and immediately discard the key. If you use a Role ARN, we rely on secure AssumeRole delegation.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function AwsConnectionCard({ details }) {
   if (!details) return null;

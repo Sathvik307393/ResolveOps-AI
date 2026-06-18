@@ -2037,17 +2037,22 @@ def aws_status(current_user: dict = Depends(get_current_user)):
             res = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/connect", json=payload, timeout=10)
             if res.status_code == 200:
                 return {
+                    "connected": True,
+                    "saved": True,
+                    "validated": True,
                     "status": "connected",
-                    "message": "AWS connection validated successfully.",
-                    "connection_details": {
-                        "name": "AWS Connection",
-                        "account_id": res.json().get("account_id", "Protected"),
-                        "auth_method": payload["auth_method"],
-                        "default_region": payload["regions"][0],
-                        "enabled_regions": payload["regions"]
-                    }
+                    "provider": "aws",
+                    "account_id": res.json().get("account_id", "Protected"),
+                    "region": payload["regions"][0],
+                    "auth_method": payload["auth_method"]
                 }
-        return {"status": "disconnected"}
+        return {
+            "connected": False,
+            "saved": False,
+            "validated": False,
+            "status": "aws_not_connected",
+            "message": "Connect AWS in Integrations."
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
