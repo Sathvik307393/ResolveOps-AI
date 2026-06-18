@@ -187,11 +187,7 @@ def sync_github(req: SyncRequest, x_github_token: Optional[str] = Header(None)):
         raise HTTPException(status_code=e.response.status_code, detail="GitHub API error validating token.")
 
     # 2. Fetch Repositories
-    url_scope_params = "visibility=all&affiliation=owner,collaborator,organization_member"
-    if req.scope == "owned":
-        url_scope_params = "visibility=all&affiliation=owner&type=owner&sort=updated&direction=desc"
-    elif req.scope == "public_owned":
-        url_scope_params = "visibility=public&affiliation=owner&type=owner&sort=updated&direction=desc"
+    url_scope_params = "visibility=all&affiliation=owner,collaborator,organization_member&sort=updated&direction=desc"
 
     raw_repos = fetch_paginated(
         f"https://api.github.com/user/repos?per_page=100&{url_scope_params}",
@@ -202,6 +198,8 @@ def sync_github(req: SyncRequest, x_github_token: Optional[str] = Header(None)):
     excluded_count = 0
     if req.scope in ["owned", "public_owned"]:
         filtered_repos = [r for r in raw_repos if r.get("owner", {}).get("login", "").lower() == username.lower()]
+        if req.scope == "public_owned":
+            filtered_repos = [r for r in filtered_repos if not r.get("private", True)]
         excluded_count = len(raw_repos) - len(filtered_repos)
         if len(filtered_repos) == 0 and len(raw_repos) > 0:
             sample_owners = list(set([r.get("owner", {}).get("login", "unknown") for r in raw_repos]))[:5]
@@ -270,6 +268,11 @@ def sync_github(req: SyncRequest, x_github_token: Optional[str] = Header(None)):
         warnings.append({
             "message": "GitHub token is valid, but no repositories are accessible. Check fine-grained PAT repository access and Actions permissions."
         })
+    elif not repos_normalized:
+        status_str = "connected_no_repositories"
+        warnings.append({
+            "message": "No owned repositories matched the authenticated GitHub username. Check owner filtering logic."
+        })
     elif not workflows_normalized:
         status_str = "partial_success"
         warnings.append({"message": "Repositories found, but no GitHub Actions workflows were detected."})
@@ -287,6 +290,8 @@ def sync_github(req: SyncRequest, x_github_token: Optional[str] = Header(None)):
         "status": status_str,
         "connected": True,
         "username": username,
+        "raw_repositories_count": len(raw_repos),
+        "owned_repositories_count": len(filtered_repos),
         "repositories_count": len(repos_normalized),
         "workflows_count": len(workflows_normalized),
         "workflow_runs_count": len(runs_normalized),
