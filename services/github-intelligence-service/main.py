@@ -4,6 +4,7 @@ import datetime
 import os
 import zipfile
 import io
+import re
 from typing import Optional, Dict, List
 from pydantic import BaseModel
 import logging
@@ -379,6 +380,113 @@ def get_workflow_logs(owner: str, repo: str, run_id: str, x_github_token: Option
     except Exception as e:
         logger.error(f"Error fetching logs for run {run_id}: {e}")
         return {"status": "logs_unavailable", "message": str(e)}
+        return {"status": "logs_unavailable", "message": str(e)}
+
+def redact_secrets(text: str) -> str:
+    """Redacts various secret formats from logs."""
+    if not text:
+        return text
+    # GitHub PAT
+    text = re.sub(r'(ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{36}', '[REDACTED_SECRET]', text)
+    # AWS Access Key
+    text = re.sub(r'AKIA[0-9A-Z]{16}', '[REDACTED_SECRET]', text)
+    # AWS Secret Key (heuristic for 40 char base64)
+    text = re.sub(r'(?i)(secret|key)[^\n]{0,20}[:=]\s*[a-zA-Z0-9/+]{40}', r'\1=[REDACTED_SECRET]', text)
+    # Azure Client Secret/UUIDs (tenant/client ids)
+    text = re.sub(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}', '[REDACTED_SECRET]', text)
+    # JWT Tokens
+    text = re.sub(r'ey[a-zA-Z0-9_-]+\.ey[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+', '[REDACTED_SECRET]', text)
+    # Passwords in URLs
+    text = re.sub(r'(https?|mongodb|postgres|mysql)://[^:]+:([^@]+)@', r'\1://[REDACTED_SECRET]@', text)
+    return text
+
+def generate_rule_based_rca(logs: str) -> dict:
+    """Generates a heuristic RCA based on common log patterns."""
+    logs_lower = logs.lower()
+    
+    # Check Azure Auth
+    if any(x in logs_lower for x in ["azure/login", "service_principal", "aadsts", "invalid client", "insufficient privileges"]):
+        return {
+            "status": "fallback_generated",
+            "provider": "rule_based",
+            "summary": "Azure Authentication Failure",
+            "probable_root_cause": "The workflow failed to authenticate with Azure, likely due to an invalid or missing Service Principal, Client ID, or Secret.",
+            "evidence": [line for line in logs.split('\n') if any(x in line.lower() for x in ["azure/login", "service_principal", "aadsts", "error"])][:3],
+            "recommended_fix": [
+                "Verify AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_CLIENT_SECRET are configured correctly in GitHub Secrets.",
+                "Ensure the Service Principal has the correct RBAC role (e.g., Contributor) on the target resource group.",
+                "Check if the credentials have expired in Azure AD."
+            ],
+            "confidence": "high",
+            "ai_provider_status": "unavailable"
+        }
+        
+    # Check Kubernetes
+    if any(x in logs_lower for x in ["imagepullbackoff", "crashloopbackoff", "errimagepull", "kubectl rollout failed"]):
+        return {
+            "status": "fallback_generated",
+            "provider": "rule_based",
+            "summary": "Kubernetes Deployment Failure",
+            "probable_root_cause": "A Kubernetes pod failed to start, possibly due to a missing container image or an application crash loop.",
+            "evidence": [line for line in logs.split('\n') if any(x in line.lower() for x in ["imagepull", "crashloop", "error"])][:3],
+            "recommended_fix": [
+                "Check if the Docker image was successfully pushed to the registry.",
+                "Verify image pull secrets are configured in the cluster.",
+                "Check pod logs using 'kubectl logs' to diagnose application crashes."
+            ],
+            "confidence": "high",
+            "ai_provider_status": "unavailable"
+        }
+
+    # Check Docker
+    if any(x in logs_lower for x in ["denied", "unauthorized", "manifest unknown", "failed to push image"]):
+        return {
+            "status": "fallback_generated",
+            "provider": "rule_based",
+            "summary": "Docker / Registry Authentication Failure",
+            "probable_root_cause": "Docker failed to push or pull an image due to missing authentication or missing tags.",
+            "evidence": [line for line in logs.split('\n') if any(x in line.lower() for x in ["denied", "unauthorized", "error", "fail"])][:3],
+            "recommended_fix": [
+                "Ensure 'docker login' was executed before pulling/pushing.",
+                "Check if registry credentials (username/password) are correct.",
+                "Verify the image tag exists or is correctly formatted."
+            ],
+            "confidence": "medium",
+            "ai_provider_status": "unavailable"
+        }
+
+    # Check Terraform
+    if any(x in logs_lower for x in ["error acquiring state lock", "provider authentication failed", "authorization failed", "resource already exists"]):
+        return {
+            "status": "fallback_generated",
+            "provider": "rule_based",
+            "summary": "Terraform Execution Failure",
+            "probable_root_cause": "Terraform encountered an error with state locking, provider authentication, or conflicting resources.",
+            "evidence": [line for line in logs.split('\n') if any(x in line.lower() for x in ["terraform", "error", "fail"])][:3],
+            "recommended_fix": [
+                "If state is locked, check for other running Terraform processes or force-unlock the state if safe.",
+                "Verify cloud provider credentials are set correctly.",
+                "Import existing resources into state before applying, if resource already exists."
+            ],
+            "confidence": "medium",
+            "ai_provider_status": "unavailable"
+        }
+
+    # Fallback Generic
+    return {
+        "status": "fallback_generated",
+        "provider": "rule_based",
+        "summary": "General Workflow Execution Failure",
+        "probable_root_cause": "A step in the GitHub Actions workflow returned a non-zero exit code.",
+        "evidence": [line for line in logs.split('\n') if "error" in line.lower() or "fail" in line.lower()][:3],
+        "recommended_fix": [
+            "Review the specific workflow step logs to identify the exact command that failed.",
+            "Check for missing secrets or environment variables.",
+            "Ensure any required dependencies or runners are available."
+        ],
+        "confidence": "low",
+        "ai_provider_status": "unavailable"
+    }
 
 class RCARequest(BaseModel):
     repository: str
@@ -400,11 +508,15 @@ def generate_rca(run_id: str, req: RCARequest, x_github_token: Optional[str] = H
     raw_logs = log_data.get("logs", "Logs not available.")
     
     # Redact potential secrets from logs
+    raw_logs = redact_secrets(raw_logs)
     if x_github_token in raw_logs:
         raw_logs = raw_logs.replace(x_github_token, "[REDACTED_SECRET]")
         
     # Forward to ai-rca-service
     ai_rca_url = os.getenv("AI_RCA_SERVICE_URL", "http://ai-rca-service:8000")
+    
+    fallback_diagnosis = generate_rule_based_rca(raw_logs)
+    
     try:
         rca_res = requests.post(f"{ai_rca_url}/api/v1/rca/analyze", json={
             "source": "github_actions",
@@ -413,14 +525,29 @@ def generate_rca(run_id: str, req: RCARequest, x_github_token: Optional[str] = H
         }, timeout=60)
         
         if rca_res.status_code != 200:
-            return {"status": "partial_success", "diagnosis": "AI RCA is unavailable because Amazon Bedrock model access or billing is not configured. GitHub workflow data is still available.", "raw_logs": raw_logs}
+            return {"status": "success", "diagnosis": fallback_diagnosis, "raw_logs": raw_logs}
             
         rca_data = rca_res.json()
-        return {"status": "success", "diagnosis": rca_data.get("analysis", "No analysis returned."), "raw_logs": raw_logs}
+        
+        # In case the AI service returns its own diagnosis schema
+        diagnosis = rca_data.get("analysis")
+        if isinstance(diagnosis, str):
+            # Try to upgrade string to the new structure if possible, else wrap it
+            diagnosis = {
+                "status": "ai_generated",
+                "provider": "ai",
+                "summary": "AI Analysis",
+                "probable_root_cause": diagnosis,
+                "evidence": [],
+                "recommended_fix": [],
+                "ai_provider_status": "available"
+            }
+            
+        return {"status": "success", "diagnosis": diagnosis, "raw_logs": raw_logs}
         
     except Exception as e:
         logger.error(f"RCA generation failed: {e}")
-        return {"status": "partial_success", "diagnosis": "AI RCA is unavailable because Amazon Bedrock model access or billing is not configured. GitHub workflow data is still available.", "raw_logs": raw_logs}
+        return {"status": "success", "diagnosis": fallback_diagnosis, "raw_logs": raw_logs}
 
 class DispatchRequest(BaseModel):
     ref: str = "main"

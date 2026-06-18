@@ -672,12 +672,90 @@ export default function GitHubSyncHub() {
                 <>
                   <div className="bg-purple-900/10 p-6 rounded-xl border border-purple-500/20 relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
-                    <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <Bot size={16} /> AI Generated Solution
-                    </h4>
-                    <div className="text-slate-300 text-sm whitespace-pre-wrap leading-relaxed prose prose-invert max-w-none">
-                      <MarkdownRenderer content={diagnoseModal.data?.diagnosis || ""} />
-                    </div>
+                    
+                    {typeof diagnoseModal.data?.diagnosis === 'object' ? (
+                      <div className="space-y-6">
+                        {/* Section 1: AI Provider Status */}
+                        {diagnoseModal.data.diagnosis.provider === 'rule_based' && (
+                          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 flex gap-3 text-sm text-amber-400">
+                            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                            <p>Primary AI provider unavailable. Showing rule-based fallback RCA.</p>
+                          </div>
+                        )}
+                        
+                        {/* Section 2: Summary */}
+                        <div>
+                          <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                            <Bot size={16} /> RCA Summary
+                          </h4>
+                          <p className="text-slate-200 text-lg font-medium">
+                            {diagnoseModal.data.diagnosis.summary}
+                          </p>
+                        </div>
+                        
+                        {/* Section 3: Probable Root Cause */}
+                        <div>
+                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                            Probable Root Cause
+                          </h4>
+                          <div className="text-slate-300 text-sm whitespace-pre-wrap leading-relaxed">
+                            {diagnoseModal.data.diagnosis.probable_root_cause}
+                          </div>
+                        </div>
+
+                        {/* Section 4: Evidence from Logs */}
+                        {diagnoseModal.data.diagnosis.evidence && diagnoseModal.data.diagnosis.evidence.length > 0 && (
+                          <div>
+                            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                              <Terminal size={12} /> Evidence from Logs
+                            </h4>
+                            <ul className="list-disc pl-5 text-rose-400 text-xs font-mono space-y-1">
+                              {diagnoseModal.data.diagnosis.evidence.map((line, i) => (
+                                <li key={i}>{line}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Section 5: Recommended Fix Steps */}
+                        {diagnoseModal.data.diagnosis.recommended_fix && diagnoseModal.data.diagnosis.recommended_fix.length > 0 && (
+                          <div>
+                            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                              <CheckCircle size={12} /> Recommended Fix Steps
+                            </h4>
+                            <ol className="list-decimal pl-5 text-emerald-400 text-sm space-y-2">
+                              {diagnoseModal.data.diagnosis.recommended_fix.map((step, i) => (
+                                <li key={i}>{step}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+                        
+                        {/* Section 7: Download Report */}
+                        <div className="pt-4 border-t border-purple-500/20">
+                          <button onClick={() => {
+                              const blob = new Blob([JSON.stringify(diagnoseModal.data.diagnosis, null, 2)], { type: 'application/json' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = 'rca_report.json';
+                              a.click();
+                            }}
+                            className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2">
+                            <ExternalLink size={14} /> Download JSON Report
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <Bot size={16} /> AI Generated Solution
+                        </h4>
+                        <div className="text-slate-300 text-sm whitespace-pre-wrap leading-relaxed prose prose-invert max-w-none">
+                          <MarkdownRenderer content={diagnoseModal.data?.diagnosis || ""} />
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {diagnoseModal.data?.raw_logs && (
