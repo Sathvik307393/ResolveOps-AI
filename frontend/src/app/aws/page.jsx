@@ -195,11 +195,11 @@ function AwsSetupGuide({ onConnect }) {
     try {
       await fetchApi("/api/v1/aws/connect", {
         method: "POST",
-        body: {
+        body: JSON.stringify({
           ...formData,
           auth_method: authMethod,
           enabled_regions: [formData.default_region]
-        }
+        })
       });
       onConnect();
     } catch (err) {

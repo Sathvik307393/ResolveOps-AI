@@ -1859,8 +1859,25 @@ async def aws_connect(req: Request, current_user: dict = Depends(get_current_use
         from database import get_user_integrations, update_user_integrations
         import requests
         
-        req_data = await req.json()
-        body = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/connect", json=req_data, timeout=10)
+        try:
+            req_data = await req.json()
+        except Exception as json_err:
+            return JSONResponse(status_code=400, content={
+                "connected": False,
+                "validated": False,
+                "status": "validation_failed",
+                "message": "Invalid JSON request payload."
+            })
+            
+        try:
+            body = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/connect", json=req_data, timeout=10)
+        except requests.exceptions.RequestException as e:
+            return JSONResponse(status_code=500, content={
+                "connected": False,
+                "status": "validation_failed",
+                "message": f"Could not connect to AWS Intelligence service: {str(e)}"
+            })
+            
         if body.status_code != 200:
             return JSONResponse(status_code=body.status_code, content={
                 "connected": False,
@@ -1902,8 +1919,7 @@ def integrations_status(current_user: dict = Depends(get_current_user)):
         integrations = get_user_integrations(tenant_email)
         
         # 1. AWS Status
-        aws_data = integrations.get("aws", integrations.get("amazon_web_services", {}))
-        aws_creds = aws_data.get("credentials", {})
+        aws_creds = get_aws_credentials_for_tenant(tenant_email)
         aws_connected = False
         aws_account_id = None
         aws_has_credentials = bool(aws_creds.get("access_key_id") or aws_creds.get("role_arn"))
@@ -2005,10 +2021,8 @@ def aws_status(current_user: dict = Depends(get_current_user)):
         tenant_email = current_user.get("email")
         from database import get_user_integrations
         import requests
-        integrations = get_user_integrations(tenant_email)
         
-        aws_data = integrations.get("aws", integrations.get("amazon_web_services", {}))
-        aws_creds = aws_data.get("credentials", {})
+        aws_creds = get_aws_credentials_for_tenant(tenant_email)
         aws_has_credentials = bool(aws_creds.get("access_key_id") or aws_creds.get("role_arn"))
         
         if aws_has_credentials:
@@ -2044,9 +2058,7 @@ def aws_resources_sync(req: Request, current_user: dict = Depends(get_current_us
         from database import get_user_integrations
         import requests
         
-        integrations = get_user_integrations(tenant_email)
-        aws_data = integrations.get("aws", integrations.get("amazon_web_services", {}))
-        creds = aws_data.get("credentials", {})
+        creds = get_aws_credentials_for_tenant(tenant_email)
         
         auth_method = "environment"
         if creds.get("access_key_id") and creds.get("secret_access_key"):
@@ -2130,10 +2142,11 @@ def aws_resource_metrics(resource_id: str, current_user: dict = Depends(get_curr
     return res.json()
 
 @app.post("/api/v1/aws/resources/{resource_id:path}/rca")
-def aws_resource_rca(resource_id: str, req: Request, current_user: dict = Depends(get_current_user)):
+async def aws_resource_rca(resource_id: str, req: Request, current_user: dict = Depends(get_current_user)):
     import requests
     safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
-    res = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/rca", json=req.json(), timeout=60)
+    req_data = await req.json()
+    res = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/rca", json=req_data, timeout=60)
     if res.status_code != 200:
         raise HTTPException(status_code=res.status_code, detail="Failed to fetch RCA")
     return res.json()
@@ -2158,6 +2171,14 @@ def get_github_token_for_tenant(tenant_email: str) -> str:
     if not pat:
         return None
     return pat
+
+def get_aws_credentials_for_tenant(tenant_email: str) -> dict:
+    integrations = get_user_integrations(tenant_email)
+    aws_aliases = ["aws", "amazon_web_services", "amazon-aws", "aws_cloud", "cloud_aws"]
+    for alias in aws_aliases:
+        if alias in integrations:
+            return integrations[alias].get("credentials", {})
+    return {}
 
 @app.get("/api/v1/github/status")
 def github_status_proxy(current_user: dict = Depends(get_current_user)):
