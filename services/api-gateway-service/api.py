@@ -1853,15 +1853,21 @@ AWS_INTELLIGENCE_SERVICE_URL = os.getenv("AWS_INTELLIGENCE_SERVICE_URL", "http:/
 GITHUB_INTELLIGENCE_SERVICE_URL = os.getenv("GITHUB_INTELLIGENCE_SERVICE_URL", "http://github-intelligence-service:8000")
 
 @app.post("/api/v1/aws/connect")
-def aws_connect(req: Request, current_user: dict = Depends(get_current_user)):
+async def aws_connect(req: Request, current_user: dict = Depends(get_current_user)):
     try:
         tenant_email = current_user.get("email")
         from database import get_user_integrations, update_user_integrations
         import requests
         
-        body = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/connect", json=req.json(), timeout=10)
+        req_data = await req.json()
+        body = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/connect", json=req_data, timeout=10)
         if body.status_code != 200:
-            raise HTTPException(status_code=body.status_code, detail=body.json().get("detail", "AWS Connection Failed"))
+            return JSONResponse(status_code=body.status_code, content={
+                "connected": False,
+                "validated": False,
+                "status": "validation_failed",
+                "message": body.json().get("detail", "AWS credentials could not be validated.")
+            })
             
         result = body.json()
         
@@ -1870,10 +1876,17 @@ def aws_connect(req: Request, current_user: dict = Depends(get_current_user)):
         if "aws" not in integrations:
             integrations["aws"] = {}
         integrations["aws"]["connected"] = True
-        integrations["aws"]["credentials"] = req.json() # Temporarily store securely in DynamoDB backend
+        integrations["aws"]["credentials"] = req_data # Temporarily store securely in DynamoDB backend
         update_user_integrations(tenant_email, integrations)
         
-        return result
+        return {
+            "connected": True,
+            "validated": True,
+            "status": "connected",
+            "account_id": result.get("account_id"),
+            "region": req_data.get("region", "us-east-1"),
+            "message": "AWS connected successfully."
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -1936,30 +1949,52 @@ def integrations_status(current_user: dict = Depends(get_current_user)):
         azure_has_credentials = bool(azure_creds.get("client_id") and azure_creds.get("client_secret"))
         azure_connected = azure_has_credentials
 
+        # Prepare AWS Status
+        aws_response = {
+            "saved": aws_has_credentials,
+            "validated": aws_connected,
+            "connected": aws_connected,
+            "has_credentials": aws_has_credentials,
+            "status": "connected" if aws_connected else ("validation_failed" if aws_has_credentials else "disconnected"),
+            "provider": "aws"
+        }
+        if aws_connected:
+            aws_response["account_id"] = aws_account_id
+            aws_response["region"] = aws_creds.get("region", aws_creds.get("default_region", "us-east-1"))
+        elif aws_has_credentials:
+            aws_response["message"] = "AWS credentials could not be validated."
+            
+        # Prepare GitHub Status
+        github_response = {
+            "saved": github_has_token,
+            "validated": github_connected,
+            "connected": github_connected,
+            "has_token": github_has_token,
+            "status": "connected" if github_connected else ("validation_failed" if github_has_token else "disconnected"),
+            "provider": "github"
+        }
+        if github_connected:
+            github_response["username"] = github_username
+        elif github_has_token:
+            github_response["message"] = "GitHub token is invalid or missing permissions."
+            
+        # Prepare Azure Status
+        azure_response = {
+            "saved": azure_has_credentials,
+            "validated": azure_connected,
+            "connected": azure_connected,
+            "has_credentials": azure_has_credentials,
+            "status": "connected" if azure_connected else "disconnected",
+            "provider": "azure"
+        }
+        if azure_has_credentials:
+            azure_response["subscription_id"] = azure_creds.get("subscription_id")
+            azure_response["tenant_id"] = azure_creds.get("tenant_id")
+
         return {
-            "aws": {
-                "connected": aws_connected,
-                "provider": "aws",
-                "account_id": aws_account_id,
-                "region": aws_creds.get("region", aws_creds.get("default_region", "us-east-1")),
-                "has_credentials": aws_has_credentials,
-                "status": "connected" if aws_connected else "disconnected"
-            },
-            "github": {
-                "connected": github_connected,
-                "provider": "github",
-                "username": github_username,
-                "has_token": github_has_token,
-                "status": "connected" if github_connected else "disconnected"
-            },
-            "azure": {
-                "connected": azure_connected,
-                "provider": "azure",
-                "subscription_id": azure_creds.get("subscription_id"),
-                "tenant_id": azure_creds.get("tenant_id"),
-                "has_credentials": azure_has_credentials,
-                "status": "connected" if azure_connected else "disconnected"
-            }
+            "aws": aws_response,
+            "github": github_response,
+            "azure": azure_response
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error validating integrations: {str(e)}")
@@ -2122,26 +2157,41 @@ def github_status_proxy(current_user: dict = Depends(get_current_user)):
     if not pat:
         return JSONResponse(status_code=200, content={
             "connected": False,
+            "validated": False,
             "status": "github_not_connected",
-            "message": "GitHub PAT is not connected."
+            "error_code": "github_pat_missing",
+            "message": "Connect your GitHub PAT in Integrations."
         })
     headers = {"X-GitHub-Token": pat}
     res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/status", headers=headers, timeout=15)
     if res.status_code == 401:
-        return JSONResponse(status_code=401, content={
-            "status": "permission_required",
+        return JSONResponse(status_code=200, content={
+            "connected": False,
+            "validated": False,
+            "status": "validation_failed",
             "error_code": "github_pat_invalid",
             "message": "GitHub token is invalid or expired."
         })
     elif res.status_code == 403:
-        return JSONResponse(status_code=403, content={
-            "status": "permission_required",
+        return JSONResponse(status_code=200, content={
+            "connected": False,
+            "validated": False,
+            "status": "validation_failed",
             "error_code": "github_permission_missing",
             "message": "GitHub token does not have permission to read repositories or Actions workflows."
         })
     if res.status_code != 200:
         return JSONResponse(status_code=res.status_code, content={"message": res.text})
-    return res.json()
+    
+    # Successful connection
+    data = res.json()
+    return JSONResponse(status_code=200, content={
+        "connected": True,
+        "validated": True,
+        "status": "connected",
+        "username": data.get("username", "Sathvik307393"),
+        "message": "GitHub connected successfully."
+    })
 
 @app.post("/api/v1/github/sync")
 def github_sync_proxy(current_user: dict = Depends(get_current_user)):

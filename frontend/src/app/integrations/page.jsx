@@ -35,11 +35,13 @@ export default function IntegrationsManager() {
       .then((data) => {
         if (data) {
           setStatus({
-            github: data.github?.connected || false,
-            aws: data.aws?.connected || false,
-            azure: data.azure?.connected || false
+            github: data?.github?.connected ?? false,
+            aws: data?.aws?.connected ?? false,
+            azure: data?.azure?.connected ?? false
           });
-          if (data.github?.username) setGithubDetails({ username: data.github.username });
+          if (data?.github?.username) {
+            setGithubDetails(data.github.username);
+          }
         }
         setLoading(false);
       })
