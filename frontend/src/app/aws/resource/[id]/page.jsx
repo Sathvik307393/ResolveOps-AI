@@ -291,6 +291,7 @@ export default function AwsResourceDetailPage() {
                        <p key={i} className="text-xs text-amber-400 mt-1">{w}</p>
                     ))}
                   </div>
+                </div>
                 )
               ) : (
                 <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
