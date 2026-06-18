@@ -1879,25 +1879,125 @@ def aws_connect(req: Request, current_user: dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/v1/integrations/status")
+def integrations_status(current_user: dict = Depends(get_current_user)):
+    try:
+        tenant_email = current_user.get("email")
+        from database import get_user_integrations
+        import requests
+        
+        integrations = get_user_integrations(tenant_email)
+        
+        # 1. AWS Status
+        aws_data = integrations.get("aws", integrations.get("amazon_web_services", {}))
+        aws_creds = aws_data.get("credentials", {})
+        aws_connected = False
+        aws_account_id = None
+        aws_has_credentials = bool(aws_creds.get("access_key_id") or aws_creds.get("role_arn"))
+        
+        if aws_has_credentials:
+            payload = {
+                "auth_method": "access_keys" if aws_creds.get("access_key_id") and aws_creds.get("secret_access_key") else ("assume_role" if aws_creds.get("role_arn") else "environment"),
+                "access_key_id": aws_creds.get("access_key_id"),
+                "secret_access_key": aws_creds.get("secret_access_key"),
+                "role_arn": aws_creds.get("role_arn"),
+                "external_id": aws_creds.get("external_id"),
+                "regions": [aws_creds.get("region", aws_creds.get("default_region", "us-east-1"))]
+            }
+            try:
+                res = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/connect", json=payload, timeout=10)
+                if res.status_code == 200:
+                    aws_connected = True
+                    aws_account_id = res.json().get("account_id")
+            except:
+                pass
+
+        # 2. GitHub Status
+        github_data = integrations.get("github", integrations.get("github_actions", {}))
+        github_creds = github_data.get("credentials", {})
+        github_token = github_creds.get("github_token", os.getenv("GITHUB_PAT"))
+        github_has_token = bool(github_token)
+        github_connected = False
+        github_username = None
+        
+        if github_has_token:
+            headers = {"X-GitHub-Token": github_token}
+            try:
+                res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/status", headers=headers, timeout=10)
+                if res.status_code == 200:
+                    github_connected = True
+                    github_username = res.json().get("username", "Connected User")
+            except:
+                pass
+
+        # 3. Azure Status
+        azure_data = integrations.get("azure", integrations.get("microsoft_azure", {}))
+        azure_creds = azure_data.get("credentials", {})
+        azure_has_credentials = bool(azure_creds.get("client_id") and azure_creds.get("client_secret"))
+        azure_connected = azure_has_credentials
+
+        return {
+            "aws": {
+                "connected": aws_connected,
+                "provider": "aws",
+                "account_id": aws_account_id,
+                "region": aws_creds.get("region", aws_creds.get("default_region", "us-east-1")),
+                "has_credentials": aws_has_credentials,
+                "status": "connected" if aws_connected else "disconnected"
+            },
+            "github": {
+                "connected": github_connected,
+                "provider": "github",
+                "username": github_username,
+                "has_token": github_has_token,
+                "status": "connected" if github_connected else "disconnected"
+            },
+            "azure": {
+                "connected": azure_connected,
+                "provider": "azure",
+                "subscription_id": azure_creds.get("subscription_id"),
+                "tenant_id": azure_creds.get("tenant_id"),
+                "has_credentials": azure_has_credentials,
+                "status": "connected" if azure_connected else "disconnected"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error validating integrations: {str(e)}")
+
 @app.get("/api/v1/aws/status")
 def aws_status(current_user: dict = Depends(get_current_user)):
     try:
         tenant_email = current_user.get("email")
         from database import get_user_integrations
+        import requests
         integrations = get_user_integrations(tenant_email)
         
-        if integrations.get("aws", {}).get("connected"):
-            return {
-                "status": "connected",
-                "message": "AWS connection validated successfully.",
-                "connection_details": {
-                    "name": integrations["aws"]["credentials"].get("connection_name", "AWS Connection"),
-                    "account_id": "Protected",
-                    "auth_method": integrations["aws"]["credentials"].get("auth_method", "environment"),
-                    "default_region": integrations["aws"]["credentials"].get("default_region", "us-east-1"),
-                    "enabled_regions": [integrations["aws"]["credentials"].get("default_region", "us-east-1")]
-                }
+        aws_data = integrations.get("aws", integrations.get("amazon_web_services", {}))
+        aws_creds = aws_data.get("credentials", {})
+        aws_has_credentials = bool(aws_creds.get("access_key_id") or aws_creds.get("role_arn"))
+        
+        if aws_has_credentials:
+            payload = {
+                "auth_method": "access_keys" if aws_creds.get("access_key_id") and aws_creds.get("secret_access_key") else ("assume_role" if aws_creds.get("role_arn") else "environment"),
+                "access_key_id": aws_creds.get("access_key_id"),
+                "secret_access_key": aws_creds.get("secret_access_key"),
+                "role_arn": aws_creds.get("role_arn"),
+                "external_id": aws_creds.get("external_id"),
+                "regions": [aws_creds.get("region", aws_creds.get("default_region", "us-east-1"))]
             }
+            res = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/connect", json=payload, timeout=10)
+            if res.status_code == 200:
+                return {
+                    "status": "connected",
+                    "message": "AWS connection validated successfully.",
+                    "connection_details": {
+                        "name": "AWS Connection",
+                        "account_id": res.json().get("account_id", "Protected"),
+                        "auth_method": payload["auth_method"],
+                        "default_region": payload["regions"][0],
+                        "enabled_regions": payload["regions"]
+                    }
+                }
         return {"status": "disconnected"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1910,15 +2010,22 @@ def aws_resources_sync(req: Request, current_user: dict = Depends(get_current_us
         import requests
         
         integrations = get_user_integrations(tenant_email)
-        creds = integrations.get("aws", {}).get("credentials", {})
+        aws_data = integrations.get("aws", integrations.get("amazon_web_services", {}))
+        creds = aws_data.get("credentials", {})
         
+        auth_method = "environment"
+        if creds.get("access_key_id") and creds.get("secret_access_key"):
+            auth_method = "access_keys"
+        elif creds.get("role_arn"):
+            auth_method = "assume_role"
+            
         payload = {
-            "auth_method": creds.get("auth_method", "environment"),
+            "auth_method": auth_method,
             "access_key_id": creds.get("access_key_id"),
             "secret_access_key": creds.get("secret_access_key"),
             "role_arn": creds.get("role_arn"),
             "external_id": creds.get("external_id"),
-            "regions": creds.get("enabled_regions", [creds.get("default_region", "us-east-1")])
+            "regions": [creds.get("region", creds.get("default_region", "us-east-1"))]
         }
         
         res = requests.post(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/sync", json=payload, timeout=60)

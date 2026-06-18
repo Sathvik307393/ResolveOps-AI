@@ -31,15 +31,15 @@ export default function IntegrationsManager() {
   const [githubToken, setGithubToken] = useState("");
 
   const loadIntegrations = () => {
-    fetchApi("/api/v1/integrations")
+    fetchApi("/api/v1/integrations/status")
       .then((data) => {
         if (data) {
           setStatus({
-            github: !!data.github,
-            aws: !!data.aws,
-            azure: !!data.azure
+            github: data.github?.connected || false,
+            aws: data.aws?.connected || false,
+            azure: data.azure?.connected || false
           });
-          if (data.github_details) setGithubDetails(data.github_details);
+          if (data.github?.username) setGithubDetails({ username: data.github.username });
         }
         setLoading(false);
       })
