@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import MarkdownRenderer from "@/components/common/MarkdownRenderer";
@@ -20,6 +20,7 @@ export default function GitHubSyncHub() {
   const [warningMsgs, setWarningMsgs] = useState([]);
   const [syncScope, setSyncScope] = useState("owned");
   const [dispatching, setDispatching] = useState({});
+  const latestSyncId = useRef(0);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -52,30 +53,27 @@ export default function GitHubSyncHub() {
 
   const applySyncResponse = (res) => {
     // Directly apply sync response data to state
-    if (res.repositories && res.repositories.length > 0) {
-      setRepos(res.repositories);
-    }
-    if (res.workflows && res.workflows.length > 0) {
-      setWorkflows(res.workflows);
-    }
+    setRepos(res.repositories || []);
+    setWorkflows(res.workflows || []);
+    
+    let sortedRuns = [];
     if (res.runs && res.runs.length > 0) {
       // Sort runs by created_at descending
-      const sortedRuns = [...res.runs].sort((a, b) =>
+      sortedRuns = [...res.runs].sort((a, b) =>
         (b.created_at || "").localeCompare(a.created_at || "")
       );
-      setRuns(sortedRuns);
     }
+    setRuns(sortedRuns);
+    
     // Build summary from sync response
     setSummary({
-      total: res.workflow_runs_count || 0,
+      total: sortedRuns.length,
       failed: res.failed_runs_count || 0,
       success: res.successful_runs_count || 0,
       in_progress: res.in_progress_runs_count || 0,
     });
     // Handle warnings
-    if (res.warnings && res.warnings.length > 0) {
-      setWarningMsgs(res.warnings.map((w) => w.message || w));
-    }
+    setWarningMsgs(res.warnings ? res.warnings.map((w) => w.message || w) : []);
   };
 
   const fetchGithubData = async () => {
@@ -97,12 +95,18 @@ export default function GitHubSyncHub() {
     }
   };
 
-  const performSync = async () => {
+  const performSync = async (scopeOverride = null) => {
+    const currentScope = typeof scopeOverride === 'string' ? scopeOverride : syncScope;
+    const syncId = Date.now();
+    latestSyncId.current = syncId;
+    
     try {
       const res = await fetchApi("/api/v1/github/sync", {
         method: "POST",
-        body: JSON.stringify({ scope: syncScope })
+        body: JSON.stringify({ scope: currentScope })
       });
+
+      if (latestSyncId.current !== syncId) return false;
 
       if (res.status === "permission_required") {
         setErrorMsg(res.message || "GitHub PAT does not have permission to read Actions workflow runs.");
@@ -114,11 +118,14 @@ export default function GitHubSyncHub() {
         applySyncResponse(res);
 
         // Handle connected_no_repositories status
-        if (res.status === "connected_no_repositories") {
+        if (res.status === "connected_no_repositories" && (!res.repositories || res.repositories.length === 0)) {
           setErrorMsg(null); // Not an error, just a warning
           setWarningMsgs(res.warnings?.map((w) => w.message || w) || [
             "GitHub token is valid, but no repositories are accessible. Check fine-grained PAT repository access and Actions permissions."
           ]);
+        } else if (res.repositories && res.repositories.length > 0) {
+          // If repos found, explicitly ensure the 'no repos' warning is cleared
+          setWarningMsgs(prev => prev.filter(msg => !msg.includes("no repositories are accessible")));
         }
         return true;
       } else {
@@ -165,11 +172,11 @@ export default function GitHubSyncHub() {
     init();
   }, [router]);
 
-  const handleForceSync = async () => {
+  const handleForceSync = async (scopeOverride = null) => {
     setSyncing(true);
     setErrorMsg(null);
     setWarningMsgs([]);
-    await performSync();
+    await performSync(scopeOverride);
     setSyncing(false);
   };
 
@@ -281,7 +288,16 @@ export default function GitHubSyncHub() {
           <div className="flex flex-col sm:flex-row items-center gap-3 relative z-10">
             <select
               value={syncScope}
-              onChange={(e) => setSyncScope(e.target.value)}
+              onChange={(e) => {
+                const newScope = e.target.value;
+                setSyncScope(newScope);
+                setRepos([]);
+                setWorkflows([]);
+                setRuns([]);
+                setWarningMsgs([]);
+                setSummary({});
+                handleForceSync(newScope);
+              }}
               disabled={syncing}
               className="bg-slate-900 text-slate-200 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-purple-500 disabled:opacity-50"
             >
@@ -310,7 +326,7 @@ export default function GitHubSyncHub() {
           </div>
           <div className="glass-panel p-5 rounded-xl border border-slate-700/50 flex flex-col justify-center">
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1 flex items-center gap-1"><GitBranch size={12}/> Recent Runs</p>
-            <p className="text-2xl font-bold text-slate-100">{summary?.total || 0}</p>
+            <p className="text-2xl font-bold text-slate-100">{runs.length}</p>
           </div>
           <div className="glass-panel p-5 rounded-xl border border-slate-700/50 flex flex-col justify-center bg-rose-500/5">
             <p className="text-[10px] text-rose-400 uppercase tracking-widest font-bold mb-1 flex items-center gap-1"><XCircle size={12}/> Failed</p>

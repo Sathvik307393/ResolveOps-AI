@@ -198,17 +198,21 @@ def sync_github(req: SyncRequest, x_github_token: Optional[str] = Header(None)):
         x_github_token
     )
     
-    logger.info(f"GitHub sync: username={username}")
-    logger.info(f"GitHub sync: raw_repos={len(raw_repos)}")
-    
     filtered_repos = raw_repos
     excluded_count = 0
     if req.scope in ["owned", "public_owned"]:
         filtered_repos = [r for r in raw_repos if r.get("owner", {}).get("login", "").lower() == username.lower()]
         excluded_count = len(raw_repos) - len(filtered_repos)
-        logger.info(f"GitHub sync: owned_repos={len(filtered_repos)}")
-        logger.info(f"GitHub sync: excluded_accessible_repos={excluded_count}")
+        if len(filtered_repos) == 0 and len(raw_repos) > 0:
+            sample_owners = list(set([r.get("owner", {}).get("login", "unknown") for r in raw_repos]))[:5]
+            logger.info(f"GitHub sync: 0 owned_repos found. Sample owners from raw: {sample_owners}")
     
+    logger.info(f"GitHub sync: username={username}")
+    logger.info(f"GitHub sync: scope={req.scope}")
+    logger.info(f"GitHub sync: raw_repos={len(raw_repos)}")
+    if req.scope in ["owned", "public_owned"]:
+        logger.info(f"GitHub sync: owned_repos={len(filtered_repos)}")
+        logger.info(f"GitHub sync: excluded_repos={excluded_count}")
     logger.info(f"GitHub sync: final_repositories_count={len(filtered_repos)}")
     
     # Normalize repos

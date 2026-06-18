@@ -2239,6 +2239,7 @@ async def github_sync_proxy(req: Request, current_user: dict = Depends(get_curre
         data = await req.json()
     except Exception:
         data = {"scope": "owned"}
+    print(f"GitHub sync scope={data.get('scope', 'owned')}")
     res = requests.post(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/sync", json=data, headers=headers, timeout=120)
     if res.status_code == 401:
         return JSONResponse(status_code=200, content={
