@@ -22,13 +22,32 @@ class SyncRequest(BaseModel):
     external_id: Optional[str] = None
     regions: List[str] = ["us-east-1"]
 
+from fastapi import APIRouter, HTTPException, Body, Header
+
 @router.post("/sync")
-def sync_resources(req: SyncRequest = Body(...)):
+def sync_resources(
+    req: SyncRequest = Body(...),
+    x_aws_access_key_id: Optional[str] = Header(None),
+    x_aws_secret_access_key: Optional[str] = Header(None),
+    x_aws_session_token: Optional[str] = Header(None),
+    x_aws_region: Optional[str] = Header(None),
+    x_tenant_email: Optional[str] = Header(None)
+):
     """
     Triggers a manual sync of all AWS resources across specified regions.
     """
     auth_kwargs = {}
-    if req.auth_method == "access_keys":
+    if x_aws_access_key_id and x_aws_secret_access_key:
+        auth_kwargs = {
+            'aws_access_key_id': x_aws_access_key_id,
+            'aws_secret_access_key': x_aws_secret_access_key
+        }
+        if x_aws_session_token:
+            auth_kwargs['aws_session_token'] = x_aws_session_token
+        # Update the regions list if a single region was specified in gateway
+        if x_aws_region and len(req.regions) == 1 and req.regions[0] == "us-east-1":
+            req.regions = [x_aws_region]
+    elif req.auth_method == "access_keys":
         if not req.access_key_id or not req.secret_access_key:
             raise HTTPException(status_code=400, detail="Missing access keys")
         auth_kwargs = {
@@ -46,7 +65,7 @@ def sync_resources(req: SyncRequest = Body(...)):
 
     try:
         service = AWSResourceDiscoveryService(auth_kwargs)
-        resources = service.scan_regions(req.regions)
+        resources, scan_warnings = service.scan_regions(req.regions)
         
         # Simple cache logic
         _db_cache["resources"] = resources
@@ -61,7 +80,7 @@ def sync_resources(req: SyncRequest = Body(...)):
         s3 = sum(1 for r in resources if "S3" in r.get("resource_type", ""))
         
         # Check if Cost Explorer failed
-        warnings = []
+        warnings = scan_warnings if scan_warnings else []
         if any(r.get("cost_status") == "permission_required" for r in resources):
             warnings.append({
                 "service": "cost-explorer",

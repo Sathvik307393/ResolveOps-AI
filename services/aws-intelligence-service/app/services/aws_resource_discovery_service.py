@@ -25,37 +25,61 @@ class AWSResourceDiscoveryService:
         kwargs['region_name'] = region
         return boto3.client(service_name, **kwargs)
 
-    def scan_regions(self, regions: List[str]) -> List[Dict]:
+    def scan_regions(self, regions: List[str]) -> tuple[List[Dict], List[Dict]]:
         """
-        Scans specified regions for AWS resources.
+        Scans specified regions for AWS resources and returns (resources, warnings).
         """
         all_resources = []
+        all_warnings = []
+        
+        def append_results(results_tuple):
+            res, warns = results_tuple
+            all_resources.extend(res)
+            all_warnings.extend(warns)
+
         for region in regions:
             logger.info(f"Scanning region: {region}")
             # EC2 & VPC
-            all_resources.extend(self._scan_vpcs(region))
-            all_resources.extend(self._scan_subnets(region))
-            all_resources.extend(self._scan_security_groups(region))
-            all_resources.extend(self._scan_ec2(region))
-            all_resources.extend(self._scan_ebs(region))
-            all_resources.extend(self._scan_eip(region))
+            append_results(self._scan_vpcs(region))
+            append_results(self._scan_subnets(region))
+            append_results(self._scan_security_groups(region))
+            append_results(self._scan_ec2(region))
+            append_results(self._scan_ebs(region))
+            append_results(self._scan_eip(region))
             
             # Application
-            all_resources.extend(self._scan_rds(region))
-            all_resources.extend(self._scan_eks(region))
-            all_resources.extend(self._scan_lambda(region))
-            all_resources.extend(self._scan_elbv2(region))
+            append_results(self._scan_rds(region))
+            append_results(self._scan_eks(region))
+            append_results(self._scan_lambda(region))
+            append_results(self._scan_elbv2(region))
             
             # Management
-            all_resources.extend(self._scan_alarms(region))
+            append_results(self._scan_alarms(region))
             
             # S3 (Global, but handled appropriately in scanner)
-            all_resources.extend(self._scan_s3(region))
+            append_results(self._scan_s3(region))
             
-        return all_resources
+        return all_resources, all_warnings
 
-    def _scan_vpcs(self, region: str) -> List[Dict]:
+    def _format_warning(self, service: str, error: Exception) -> Dict:
+        """Helper to format warnings consistently."""
+        code = "UnknownError"
+        if hasattr(error, 'response') and error.response:
+            code = error.response.get('Error', {}).get('Code', 'UnknownError')
+        elif "AccessDenied" in str(error):
+            code = "AccessDenied"
+        elif "NoCredentialsError" in str(error):
+            code = "NoCredentialsError"
+            
+        return {
+            "service": service,
+            "code": code,
+            "message": str(error)
+        }
+
+    def _scan_vpcs(self, region: str) -> tuple[List[Dict], List[Dict]]:
         resources = []
+        warnings = []
         try:
             ec2 = self._get_client('ec2', region)
             response = ec2.describe_vpcs()
@@ -77,10 +101,12 @@ class AWSResourceDiscoveryService:
                 ))
         except Exception as e:
             logger.error(f"Failed to scan VPCs in {region}: {e}")
-        return resources
+            warnings.append(self._format_warning("ec2_vpc", e))
+        return resources, warnings
 
-    def _scan_ec2(self, region: str) -> List[Dict]:
+    def _scan_ec2(self, region: str) -> tuple[List[Dict], List[Dict]]:
         resources = []
+        warnings = []
         logger.info(f"scanning region: {region}")
         logger.info("EC2 describe_instances started")
         try:
@@ -113,11 +139,12 @@ class AWSResourceDiscoveryService:
             logger.info(f"EC2 instances found count: {len(resources)}")
         except Exception as e:
             logger.error(f"Failed to scan EC2 instances in {region}: {e}")
-            logger.warning(f"scanner warnings: {e}")
-        return resources
+            warnings.append(self._format_warning("ec2", e))
+        return resources, warnings
 
-    def _scan_s3(self, region: str) -> List[Dict]:
+    def _scan_s3(self, region: str) -> tuple[List[Dict], List[Dict]]:
         resources = []
+        warnings = []
         try:
             from botocore.exceptions import ClientError
             s3 = self._get_client('s3', region)
@@ -125,7 +152,7 @@ class AWSResourceDiscoveryService:
             # Only list buckets once (when region is us-east-1) to avoid duplicates, 
             # or filter appropriately. For simplicity, we just check if region is us-east-1.
             if region != 'us-east-1':
-                return []
+                return resources, warnings
                 
             response = s3.list_buckets()
             for bucket in response.get('Buckets', []):
@@ -179,10 +206,12 @@ class AWSResourceDiscoveryService:
                 ))
         except Exception as e:
             logger.error(f"Failed to scan S3 buckets: {e}")
-        return resources
+            warnings.append(self._format_warning("s3", e))
+        return resources, warnings
 
-    def _scan_rds(self, region: str) -> List[Dict]:
+    def _scan_rds(self, region: str) -> tuple[List[Dict], List[Dict]]:
         resources = []
+        warnings = []
         try:
             rds = self._get_client('rds', region)
             response = rds.describe_db_instances()
@@ -207,10 +236,12 @@ class AWSResourceDiscoveryService:
                 ))
         except Exception as e:
             logger.error(f"Failed to scan RDS instances in {region}: {e}")
-        return resources
+            warnings.append(self._format_warning("rds", e))
+        return resources, warnings
 
-    def _scan_eks(self, region: str) -> List[Dict]:
+    def _scan_eks(self, region: str) -> tuple[List[Dict], List[Dict]]:
         resources = []
+        warnings = []
         try:
             eks = self._get_client('eks', region)
             response = eks.list_clusters()
@@ -238,10 +269,12 @@ class AWSResourceDiscoveryService:
                     logger.error(f"Failed to describe EKS cluster {cluster_name}: {ce}")
         except Exception as e:
             logger.error(f"Failed to scan EKS clusters in {region}: {e}")
-        return resources
+            warnings.append(self._format_warning("eks", e))
+        return resources, warnings
 
-    def _scan_subnets(self, region: str) -> List[Dict]:
+    def _scan_subnets(self, region: str) -> tuple[List[Dict], List[Dict]]:
         resources = []
+        warnings = []
         try:
             ec2 = self._get_client('ec2', region)
             response = ec2.describe_subnets()
@@ -255,11 +288,14 @@ class AWSResourceDiscoveryService:
                     resource_name=name, arn=arn, status=sn.get('State', 'unknown'), tags=tags,
                     metadata={"vpc_id": sn.get('VpcId'), "cidr_block": sn.get('CidrBlock')}
                 ))
-        except Exception as e: logger.error(f"Failed to scan subnets in {region}: {e}")
-        return resources
+        except Exception as e:
+            logger.error(f"Failed to scan subnets in {region}: {e}")
+            warnings.append(self._format_warning("ec2_subnet", e))
+        return resources, warnings
 
-    def _scan_security_groups(self, region: str) -> List[Dict]:
+    def _scan_security_groups(self, region: str) -> tuple[List[Dict], List[Dict]]:
         resources = []
+        warnings = []
         try:
             ec2 = self._get_client('ec2', region)
             response = ec2.describe_security_groups()
@@ -273,11 +309,14 @@ class AWSResourceDiscoveryService:
                     resource_name=name, arn=arn, status="available", tags=tags,
                     metadata={"vpc_id": sg.get('VpcId'), "description": sg.get('Description'), "ip_permissions": sg.get('IpPermissions', [])}
                 ))
-        except Exception as e: logger.error(f"Failed to scan SGs in {region}: {e}")
-        return resources
+        except Exception as e:
+            logger.error(f"Failed to scan SGs in {region}: {e}")
+            warnings.append(self._format_warning("ec2_sg", e))
+        return resources, warnings
 
-    def _scan_ebs(self, region: str) -> List[Dict]:
+    def _scan_ebs(self, region: str) -> tuple[List[Dict], List[Dict]]:
         resources = []
+        warnings = []
         try:
             ec2 = self._get_client('ec2', region)
             response = ec2.describe_volumes()
@@ -291,11 +330,14 @@ class AWSResourceDiscoveryService:
                     resource_name=name, arn=arn, status=vol.get('State', 'unknown'), created_at=vol.get('CreateTime'), tags=tags,
                     metadata={"size": vol.get('Size'), "volume_type": vol.get('VolumeType'), "encrypted": vol.get('Encrypted')}
                 ))
-        except Exception as e: logger.error(f"Failed to scan EBS in {region}: {e}")
-        return resources
+        except Exception as e:
+            logger.error(f"Failed to scan EBS in {region}: {e}")
+            warnings.append(self._format_warning("ec2_ebs", e))
+        return resources, warnings
 
-    def _scan_eip(self, region: str) -> List[Dict]:
+    def _scan_eip(self, region: str) -> tuple[List[Dict], List[Dict]]:
         resources = []
+        warnings = []
         try:
             ec2 = self._get_client('ec2', region)
             response = ec2.describe_addresses()
@@ -309,11 +351,14 @@ class AWSResourceDiscoveryService:
                     resource_name=name, arn=arn, status="in-use" if eip.get('AssociationId') else "unassociated", tags=tags,
                     metadata={"public_ip": eip.get('PublicIp'), "instance_id": eip.get('InstanceId')}
                 ))
-        except Exception as e: logger.error(f"Failed to scan EIP in {region}: {e}")
-        return resources
+        except Exception as e:
+            logger.error(f"Failed to scan EIP in {region}: {e}")
+            warnings.append(self._format_warning("ec2_eip", e))
+        return resources, warnings
 
-    def _scan_lambda(self, region: str) -> List[Dict]:
+    def _scan_lambda(self, region: str) -> tuple[List[Dict], List[Dict]]:
         resources = []
+        warnings = []
         try:
             lmd = self._get_client('lambda', region)
             response = lmd.list_functions()
@@ -325,11 +370,14 @@ class AWSResourceDiscoveryService:
                     resource_name=name, arn=arn, status=func.get('State', 'Active'),
                     metadata={"runtime": func.get('Runtime'), "timeout": func.get('Timeout')}
                 ))
-        except Exception as e: logger.error(f"Failed to scan Lambda in {region}: {e}")
-        return resources
+        except Exception as e:
+            logger.error(f"Failed to scan Lambda in {region}: {e}")
+            warnings.append(self._format_warning("lambda", e))
+        return resources, warnings
 
-    def _scan_elbv2(self, region: str) -> List[Dict]:
+    def _scan_elbv2(self, region: str) -> tuple[List[Dict], List[Dict]]:
         resources = []
+        warnings = []
         try:
             elb = self._get_client('elbv2', region)
             response = elb.describe_load_balancers()
@@ -351,11 +399,14 @@ class AWSResourceDiscoveryService:
                     resource_name=name, arn=arn, status="available",
                     metadata={"target_type": tg.get('TargetType'), "port": tg.get('Port')}
                 ))
-        except Exception as e: logger.error(f"Failed to scan ELBv2 in {region}: {e}")
-        return resources
+        except Exception as e:
+            logger.error(f"Failed to scan ELB in {region}: {e}")
+            warnings.append(self._format_warning("elbv2", e))
+        return resources, warnings
 
-    def _scan_alarms(self, region: str) -> List[Dict]:
+    def _scan_alarms(self, region: str) -> tuple[List[Dict], List[Dict]]:
         resources = []
+        warnings = []
         try:
             cw = self._get_client('cloudwatch', region)
             response = cw.describe_alarms()
@@ -367,5 +418,7 @@ class AWSResourceDiscoveryService:
                     resource_name=name, arn=arn, status=alarm.get('StateValue', 'unknown'),
                     metadata={"namespace": alarm.get('Namespace'), "metric_name": alarm.get('MetricName')}
                 ))
-        except Exception as e: logger.error(f"Failed to scan Alarms in {region}: {e}")
-        return resources
+        except Exception as e:
+            logger.error(f"Failed to scan CloudWatch alarms in {region}: {e}")
+            warnings.append(self._format_warning("cloudwatch", e))
+        return resources, warnings

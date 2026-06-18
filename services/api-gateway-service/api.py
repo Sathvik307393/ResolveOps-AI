@@ -14,6 +14,7 @@ import uuid
 import boto3
 from boto3.dynamodb.conditions import Key
 import requests
+import httpx
 
 from database import (
     init_dynamodb, get_users_table, get_keys_table, get_incidents_table, get_logs_table,
@@ -2589,6 +2590,56 @@ async def github_workflow_dispatch_proxy(owner: str, repo: str, workflow_id: str
     if res.status_code != 200:
         return JSONResponse(status_code=res.status_code, content={"message": res.text})
     return res.json()
+
+@app.api_route("/api/v1/aws/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_aws_requests(path: str, request: Request, current_user: dict = Depends(get_current_user)):
+    """
+    Proxies all AWS intelligence requests to aws-intelligence-service.
+    Injects AWS credentials from the central integration state as headers.
+    """
+    tenant_email = current_user.get("email")
+    integrations = get_user_integrations(tenant_email)
+    
+    aws_creds = integrations.get("aws", {}).get("credentials", {})
+    aws_region = integrations.get("aws", {}).get("region", "us-east-1")
+    
+    access_key = aws_creds.get("access_key_id", "")
+    secret_key = aws_creds.get("secret_access_key", "")
+    session_token = aws_creds.get("session_token", "")
+    
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    headers.pop("content-length", None) # Let httpx recalculate
+    
+    if access_key: headers["X-AWS-Access-Key-Id"] = access_key
+    if secret_key: headers["X-AWS-Secret-Access-Key"] = secret_key
+    if session_token: headers["X-AWS-Session-Token"] = session_token
+    if aws_region: headers["X-AWS-Region"] = aws_region
+    headers["X-Tenant-Email"] = tenant_email
+    
+    _aws_svc_url = os.getenv("AWS_INTELLIGENCE_SERVICE_URL", "http://aws-intelligence-service:8000")
+    url = f"{_aws_svc_url}/api/v1/aws/{path}"
+    
+    body = await request.body()
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            proxy_req = client.build_request(
+                method=request.method,
+                url=url,
+                headers=headers,
+                content=body,
+                params=request.query_params
+            )
+            proxy_res = await client.send(proxy_req, timeout=120.0)
+            from fastapi.responses import Response
+            return Response(
+                content=proxy_res.content,
+                status_code=proxy_res.status_code,
+                headers=dict(proxy_res.headers)
+            )
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=502, detail=f"Failed to communicate with AWS intelligence service: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
