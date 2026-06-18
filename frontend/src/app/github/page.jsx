@@ -29,6 +29,11 @@ export default function GitHubSyncHub() {
         setStatusData(res);
         return true;
       }
+      if (res && res.message) {
+        setErrorMsg(res.message);
+      } else {
+        setErrorMsg("Connect your GitHub PAT in Integrations.");
+      }
       return false;
     } catch (e) {
       if (e.message?.includes("PAT") || e.message?.includes("token") || e.message?.includes("configured")) {
