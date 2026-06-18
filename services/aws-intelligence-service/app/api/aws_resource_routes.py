@@ -6,6 +6,8 @@ from app.services.aws_cost_service import AWSCostService
 from app.services.aws_risk_analysis_service import AWSRiskAnalysisService
 from app.services.aws_cloudwatch_service import AWSCloudWatchService
 from app.services.aws_eks_visibility_service import AWSEKSVisibilityService
+from app.services.aws_subresource_service import AWSSubResourceService
+from app.services.aws_runtime_service import AWSRuntimeService
 
 router = APIRouter(prefix="/api/v1/aws/resources", tags=["AWS Resources"])
 
@@ -94,6 +96,14 @@ def get_resources():
     """
     return {"resources": _db_cache.get("resources", [])}
 
+@router.get("/{resource_id:path}")
+def get_resource(resource_id: str):
+    resources = _db_cache.get("resources", [])
+    resource = next((r for r in resources if r["id"] == resource_id), None)
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    return resource
+
 @router.get("/{resource_id:path}/cost")
 def get_resource_cost(resource_id: str):
     # Retrieve the resource to get its region
@@ -170,8 +180,42 @@ def get_resource_events(resource_id: str):
     if not resource:
         raise HTTPException(status_code=404, detail="Resource not found")
         
-    # Mocking events for now
+    # Remove the generic mock. Since we don't have an event service implemented, we can return empty
+    # to signify no events instead of a fake mock that confuses the user.
     return {"events": []}
+
+@router.get("/{resource_id:path}/subresources")
+def get_resource_subresources(resource_id: str):
+    resources = _db_cache.get("resources", [])
+    resource = next((r for r in resources if r["id"] == resource_id), None)
+    
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+        
+    service = AWSSubResourceService({})
+    return service.get_subresources(
+        resource.get("resource_type", ""),
+        resource_id,
+        resource.get("resource_name", ""),
+        resource.get("region", "us-east-1")
+    )
+
+@router.get("/{resource_id:path}/runtime")
+def get_resource_runtime(resource_id: str):
+    resources = _db_cache.get("resources", [])
+    resource = next((r for r in resources if r["id"] == resource_id), None)
+    
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+        
+    if "EC2" not in resource.get("resource_type", ""):
+        raise HTTPException(status_code=400, detail="Runtime discovery is only supported for EC2 instances")
+        
+    service = AWSRuntimeService({})
+    return service.get_ec2_runtime(
+        resource_id.split("/")[-1] if "/" in resource_id else resource_id, # Extract instance id
+        resource.get("region", "us-east-1")
+    )
 
 @router.get("/{resource_id:path}/relationships")
 def get_resource_relationships(resource_id: str):
@@ -183,12 +227,24 @@ def get_resource_relationships(resource_id: str):
         
     relationships = []
     meta = resource.get("metadata", {})
-    if meta.get("vpc_id"):
-        relationships.append({"type": "VPC", "id": meta.get("vpc_id")})
-    if meta.get("subnet_id"):
-        relationships.append({"type": "Subnet", "id": meta.get("subnet_id")})
-    if meta.get("security_groups"):
+    res_type = resource.get("resource_type", "")
+    
+    if "EC2" in res_type:
+        if meta.get("vpc_id"): relationships.append({"type": "VPC", "id": meta.get("vpc_id")})
+        if meta.get("subnet_id"): relationships.append({"type": "Subnet", "id": meta.get("subnet_id")})
         for sg in meta.get("security_groups", []):
             relationships.append({"type": "SecurityGroup", "id": sg.get("GroupId", sg)})
+    
+    elif "LoadBalancer" in res_type:
+        # Load balancers have VPCs and subnets typically
+        if meta.get("vpc_id"): relationships.append({"type": "VPC", "id": meta.get("vpc_id")})
+        for sn in meta.get("subnets", []):
+            relationships.append({"type": "Subnet", "id": sn})
+            
+    elif "RDS" in res_type:
+        if meta.get("subnet_group"): relationships.append({"type": "DB Subnet Group", "id": meta.get("subnet_group")})
+        
+    elif "S3" in res_type:
+        relationships.append({"type": "Bucket Policy", "id": "Policy"})
             
     return {"relationships": relationships}

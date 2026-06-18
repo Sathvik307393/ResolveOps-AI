@@ -295,6 +295,7 @@ function AwsResourceInventory({ resources }) {
               <th className="p-4 font-medium hidden md:table-cell">Region</th>
               <th className="p-4 font-medium">Status</th>
               <th className="p-4 font-medium hidden lg:table-cell">Instance Type / SKU</th>
+              <th className="p-4 font-medium hidden xl:table-cell">Features</th>
               <th className="p-4 font-medium">Public IP</th>
               <th className="p-4 font-medium hidden xl:table-cell">Private IP</th>
               <th className="p-4 font-medium hidden md:table-cell">Risk</th>
@@ -326,6 +327,14 @@ function AwsResourceInventory({ resources }) {
                 </td>
                 <td className="p-4 text-slate-300 text-xs hidden lg:table-cell">
                   {res.metadata?.instance_type || res.metadata?.instance_class || "-"}
+                </td>
+                <td className="p-4 text-slate-300 hidden xl:table-cell">
+                  <div className="flex gap-1">
+                    <span title="Sub-resources" className="w-5 h-5 flex items-center justify-center rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px]">S</span>
+                    {res.resource_type?.includes("EC2") && <span title="Runtime Workloads" className="w-5 h-5 flex items-center justify-center rounded bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20 text-[10px]">R</span>}
+                    <span title="Metrics" className="w-5 h-5 flex items-center justify-center rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px]">M</span>
+                    <span title="Logs/Events" className="w-5 h-5 flex items-center justify-center rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">L</span>
+                  </div>
                 </td>
                 <td className="p-4 text-slate-300 text-xs font-mono">
                   {res.metadata?.public_ip || "-"}

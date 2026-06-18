@@ -2118,17 +2118,50 @@ def aws_resources(current_user: dict = Depends(get_current_user)):
 def aws_resource_details(resource_id: str, current_user: dict = Depends(get_current_user)):
     import requests
     # Find resource in the list to return details
-    res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources", timeout=10)
-    if res.status_code == 200:
-        resources = res.json().get("resources", [])
-        for r in resources:
-            if r["id"] == urllib.parse.unquote(resource_id):
-                return r
+    import urllib.parse
+    safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
+    try:
+        res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}", timeout=10)
+        if res.status_code == 200:
+            return res.json()
+    except Exception:
+        pass
     raise HTTPException(status_code=404, detail="Resource not found")
+
+@app.get("/api/v1/aws/resources/{resource_id:path}/subresources")
+def aws_resource_subresources(resource_id: str, current_user: dict = Depends(get_current_user)):
+    import requests
+    import urllib.parse
+    safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
+    try:
+        res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/subresources", timeout=10)
+        if res.status_code == 200:
+            return res.json()
+        elif res.status_code == 400:
+            raise HTTPException(status_code=400, detail=res.json().get("detail", "Bad Request"))
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+    return {"status": "error", "warnings": ["Failed to connect to Intelligence Service"], "subresources": {}}
+
+@app.get("/api/v1/aws/resources/{resource_id:path}/runtime")
+def aws_resource_runtime(resource_id: str, current_user: dict = Depends(get_current_user)):
+    import requests
+    import urllib.parse
+    safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
+    try:
+        res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/runtime", timeout=10)
+        if res.status_code == 200:
+            return res.json()
+        elif res.status_code == 400:
+            raise HTTPException(status_code=400, detail=res.json().get("detail", "Runtime discovery not supported for this resource type"))
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+    return {"status": "error", "message": "Failed to connect to Intelligence Service", "runtime": {"containers": [], "processes": []}}
 
 @app.get("/api/v1/aws/resources/{resource_id:path}/cost")
 def aws_resource_cost(resource_id: str, current_user: dict = Depends(get_current_user)):
     import requests
+    import urllib.parse
     safe_id = urllib.parse.quote(urllib.parse.unquote(resource_id), safe="")
     try:
         res = requests.get(f"{AWS_INTELLIGENCE_SERVICE_URL}/api/v1/aws/resources/{safe_id}/cost", timeout=10)

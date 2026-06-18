@@ -21,6 +21,8 @@ export default function AwsResourceDetailPage() {
   const [metrics, setMetrics] = useState(null);
   const [events, setEvents] = useState([]);
   const [relationships, setRelationships] = useState([]);
+  const [subresources, setSubresources] = useState(null);
+  const [runtime, setRuntime] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -59,6 +61,15 @@ export default function AwsResourceDetailPage() {
 
       const relsData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/relationships`).catch(() => []);
       if (relsData) setRelationships(relsData.relationships || []);
+
+      const subData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/subresources`).catch(() => null);
+      if (subData) setSubresources(subData);
+
+      if (resData?.resource_type?.includes("EC2")) {
+          const runData = await fetchApi(`/api/v1/aws/resources/${encodeURIComponent(resourceId)}/runtime`).catch(() => null);
+          if (runData) setRuntime(runData);
+      }
+
 
     } catch (err) {
       console.error("Failed to load resource data", err);
@@ -265,7 +276,15 @@ export default function AwsResourceDetailPage() {
                 <div className="text-sm text-slate-400 italic">No direct relationships found.</div>
               )}
               <p className="text-xs text-slate-500 mt-4 italic border-t border-slate-700/50 pt-4">More relationships available in Architecture Diagram.</p>
-            </div>
+            {/* Sub-Resources */}
+            {subresources && (
+              <AwsSubResources subresources={subresources} resource={resource} />
+            )}
+
+            {/* Runtime Workloads */}
+            {runtime && (
+              <AwsRuntime runtime={runtime} />
+            )}
           </div>
         </div>
       </div>
@@ -406,6 +425,121 @@ function AwsResourceLogsAndEvents({ logs, logsStatus, metrics, events, resource 
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function AwsSubResources({ subresources, resource }) {
+  if (!subresources || Object.keys(subresources).length === 0) return null;
+  
+  const hasWarnings = subresources.status === "partial_success" && subresources.warnings && subresources.warnings.length > 0;
+
+  return (
+    <div className="glass-panel p-6 rounded-xl border border-slate-700/50">
+      <h3 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
+        <Layers className="w-5 h-5 text-indigo-400" /> Sub-Resources & Child Components
+      </h3>
+      
+      {hasWarnings && (
+        <div className="mb-4 p-4 bg-slate-800 border border-slate-700 rounded-lg">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-slate-200">Sub-resource discovery partially available</p>
+              <ul className="mt-1 space-y-1">
+                {subresources.warnings.map((w, i) => <li key={i} className="text-xs text-slate-400">• {w}</li>)}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {Object.entries(subresources.subresources || {}).map(([key, val]) => {
+          if (!val || (Array.isArray(val) && val.length === 0) || (typeof val === 'object' && Object.keys(val).length === 0)) return null;
+          
+          return (
+            <div key={key} className="p-4 bg-slate-800/30 border border-slate-700/50 rounded-lg">
+              <h4 className="text-sm font-semibold text-slate-300 capitalize mb-3 border-b border-slate-700 pb-2">
+                {key.replace(/_/g, ' ')}
+              </h4>
+              
+              {Array.isArray(val) ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {val.map((item, idx) => (
+                    <div key={idx} className="p-3 bg-slate-800/50 border border-slate-700 rounded-md text-xs">
+                      {typeof item === 'object' ? (
+                        Object.entries(item).map(([k, v]) => (
+                           <div key={k} className="flex justify-between mb-1 last:mb-0">
+                             <span className="text-slate-500 capitalize">{k.replace(/_/g, ' ')}:</span>
+                             <span className="text-slate-300 font-mono text-right truncate max-w-[120px]" title={String(v)}>{String(v)}</span>
+                           </div>
+                        ))
+                      ) : (
+                        <span className="text-slate-300 font-mono">{item}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-800/50 border border-slate-700 rounded-md text-xs text-slate-300 font-mono">
+                  {JSON.stringify(val, null, 2)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AwsRuntime({ runtime }) {
+  if (!runtime) return null;
+  
+  const isError = runtime.status === "error" || runtime.status === "permission_required";
+  const hasContainers = runtime.runtime?.containers && runtime.runtime.containers.length > 0;
+
+  return (
+    <div className="glass-panel p-6 rounded-xl border border-slate-700/50">
+      <h3 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
+        <Server className="w-5 h-5 text-fuchsia-400" /> Runtime & Containers
+      </h3>
+      
+      {isError ? (
+        <div className="p-4 bg-slate-800 border border-slate-700 rounded-lg">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-slate-200">Runtime discovery unavailable</p>
+              <p className="text-sm text-slate-400 mt-1">{runtime.message || "Runtime discovery requires AWS Systems Manager or a ResolveOps agent."}</p>
+            </div>
+          </div>
+        </div>
+      ) : hasContainers ? (
+        <div className="space-y-3">
+          {runtime.runtime.containers.map((c, i) => (
+            <div key={i} className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg flex flex-wrap gap-4 items-center justify-between text-sm">
+               <div className="flex flex-col">
+                  <span className="text-slate-500 text-xs">Container Name</span>
+                  <span className="text-slate-200 font-bold">{c.name}</span>
+               </div>
+               <div className="flex flex-col">
+                  <span className="text-slate-500 text-xs">Image</span>
+                  <span className="text-slate-300 font-mono">{c.image}</span>
+               </div>
+               <div className="flex flex-col">
+                  <span className="text-slate-500 text-xs">Status</span>
+                  <span className="text-emerald-400">{c.status}</span>
+               </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="p-4 bg-slate-800 border border-slate-700 rounded-lg text-slate-400 text-sm">
+          {runtime.message || "No runtime containers discovered."}
+        </div>
+      )}
     </div>
   );
 }
