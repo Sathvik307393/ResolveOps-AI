@@ -2521,7 +2521,7 @@ def github_repos_proxy(current_user: dict = Depends(get_current_user)):
     if not pat:
         return JSONResponse(status_code=400, content={"message": "GitHub PAT is not connected."})
     headers = {"X-GitHub-Token": pat}
-    res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/repos", headers=headers, timeout=15)
+    res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/repos", headers=headers, timeout=120)
     if res.status_code != 200:
         return JSONResponse(status_code=res.status_code, content={"message": res.text})
     return res.json()
@@ -2533,7 +2533,7 @@ def github_workflows_proxy(current_user: dict = Depends(get_current_user)):
     if not pat:
         return JSONResponse(status_code=400, content={"message": "GitHub PAT is not connected."})
     headers = {"X-GitHub-Token": pat}
-    res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/workflows", headers=headers, timeout=15)
+    res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/workflows", headers=headers, timeout=120)
     if res.status_code != 200:
         return JSONResponse(status_code=res.status_code, content={"message": res.text})
     return res.json()
@@ -2545,7 +2545,7 @@ def github_runs_proxy(current_user: dict = Depends(get_current_user)):
     if not pat:
         return JSONResponse(status_code=400, content={"message": "GitHub PAT is not connected."})
     headers = {"X-GitHub-Token": pat}
-    res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/runs", headers=headers, timeout=15)
+    res = requests.get(f"{GITHUB_INTELLIGENCE_SERVICE_URL}/api/v1/github/runs", headers=headers, timeout=120)
     if res.status_code != 200:
         return JSONResponse(status_code=res.status_code, content={"message": res.text})
     return res.json()
