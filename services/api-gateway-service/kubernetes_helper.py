@@ -45,12 +45,6 @@ def get_kubernetes_workloads(kubeconfig_yaml):
     try:
         kubeconfig_dict = yaml.safe_load(kubeconfig_yaml)
         api_client = config.new_client_from_config_dict(kubeconfig_dict)
-        
-        # Configure proxy if specified in environment variables
-        proxy_url = os.environ.get("K8S_PROXY_URL") or os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
-        if proxy_url:
-            api_client.configuration.proxy = proxy_url
-            
         core_v1 = client.CoreV1Api(api_client)
         apps_v1 = client.AppsV1Api(api_client)
         
