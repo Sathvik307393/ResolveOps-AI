@@ -1436,7 +1436,10 @@ def get_cloud_resources(current_user: dict = Depends(get_current_user)):
                 try:
                     from azure.identity import ClientSecretCredential
                     from azure.mgmt.subscription import SubscriptionClient
-                    from azure.mgmt.resource import ResourceManagementClient
+                    try:
+                        from azure.mgmt.resource import ResourceManagementClient
+                    except ImportError:
+                        from azure.mgmt.resource.resources import ResourceManagementClient
                     
                     credential = ClientSecretCredential(
                         tenant_id=azure_tenant,
@@ -1647,7 +1650,10 @@ def get_azure_resource_details(resource_id: str, current_user: dict = Depends(ge
             raise HTTPException(status_code=400, detail="Azure not connected")
 
         from azure.identity import ClientSecretCredential
-        from azure.mgmt.resource import ResourceManagementClient
+        try:
+            from azure.mgmt.resource import ResourceManagementClient
+        except ImportError:
+            from azure.mgmt.resource.resources import ResourceManagementClient
         
         credential = ClientSecretCredential(
             tenant_id=azure_tenant,
